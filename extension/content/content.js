@@ -119,6 +119,143 @@ async function selectBookingDates(checkIn, checkOut) {
   };
 }
 
+async function openGuestSelector() {
+  const guestButton =
+    document.querySelector('[data-testid="occupancy-config"]') ||
+    document.querySelector('[data-testid="searchbox-occupancy"]');
+
+  if (!guestButton) {
+    return { ok: false, error: "Guest selector button not found" };
+  }
+
+  guestButton.click();
+  await wait(500);
+
+  return { ok: true };
+}
+
+function getAdultCountElement() {
+  return document.querySelector('[data-testid="occupancy-popup"] span');
+}
+
+function getAdultPlusButton() {
+  return document.querySelector(
+    '[data-testid="occupancy-popup"] button[aria-label*="성인 수 증가"], ' +
+    '[data-testid="occupancy-popup"] button[aria-label*="Increase adults"]'
+  );
+}
+
+function getAdultMinusButton() {
+  return document.querySelector(
+    '[data-testid="occupancy-popup"] button[aria-label*="성인 수 감소"], ' +
+    '[data-testid="occupancy-popup"] button[aria-label*="Decrease adults"]'
+  );
+}
+
+async function setAdultCount(targetAdults) {
+  const opened = await openGuestSelector();
+
+  if (!opened.ok) return opened;
+
+  await wait(500);
+
+  const countElement = getAdultCountElement();
+
+  if (!countElement) {
+    return { ok: false, error: "Adult count element not found" };
+  }
+
+  let current = parseInt(countElement.textContent.trim(), 10);
+
+  if (isNaN(current)) {
+    return { ok: false, error: "Failed to read adult count" };
+  }
+
+  const plusButton = getAdultPlusButton();
+  const minusButton = getAdultMinusButton();
+
+  if (!plusButton || !minusButton) {
+    return { ok: false, error: "Plus/Minus button not found" };
+  }
+
+  while (current < targetAdults) {
+    plusButton.click();
+    current++;
+    await wait(300);
+  }
+
+  while (current > targetAdults) {
+    minusButton.click();
+    current--;
+    await wait(300);
+  }
+
+  return {
+    ok: true,
+    field: "adults",
+    value: targetAdults
+  };
+}
+
+async function clickGuestDoneButton() {
+  const buttons = Array.from(document.querySelectorAll("button"));
+
+  const doneButton = buttons.find((button) => {
+    const text = button.textContent.trim();
+    return text === "완료" || text === "Done";
+  });
+
+  if (!doneButton) {
+    return { ok: false, error: "Guest done button not found" };
+  }
+
+  doneButton.click();
+  await wait(500);
+
+  return {
+    ok: true,
+    field: "guestDone",
+    text: doneButton.textContent.trim()
+  };
+}
+
+async function clickSearchButton() {
+  const searchButton =
+    document.querySelector('button[type="submit"]') ||
+    document.querySelector('[data-testid="searchbox-submit-button"]') ||
+    Array.from(document.querySelectorAll("button")).find(
+      (button) => button.textContent.trim() === "검색"
+    );
+
+  if (!searchButton) {
+    return { ok: false, error: "Search button not found" };
+  }
+
+  searchButton.click();
+
+  return { ok: true, field: "search" };
+}
+
+async function runBookingFlow(data) {
+  await wait(500);
+
+  fillDestination(data.destination);
+  await wait(800);
+
+  await selectBookingDates(data.checkIn, data.checkOut);
+  await wait(800);
+
+  await setAdultCount(data.adults);
+  await wait(800);
+
+  await clickGuestDoneButton();
+  await wait(500);
+
+  await clickSearchButton();
+
+  return { ok: true };
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log("[Travel Agent] Message received:", message);
 
@@ -142,6 +279,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       message.payload.checkOut
     ).then(sendResponse);
 
+    return true;
+  }
+
+  if (message.type === "SET_ADULTS") {
+    setAdultCount(message.payload.adults).then(sendResponse);
+    return true;
+  }
+
+  if (message.type === "CLICK_GUEST_DONE") {
+    clickGuestDoneButton().then(sendResponse);
+    return true;
+  }
+
+  if (message.type === "CLICK_SEARCH") {
+    clickSearchButton().then(sendResponse);
+    return true;
+  }
+
+  if (message.type === "RUN_BOOKING_FLOW") {
+    runBookingFlow(message.payload).then(sendResponse);
     return true;
   }
 });

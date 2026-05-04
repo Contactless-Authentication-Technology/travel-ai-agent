@@ -39,3 +39,36 @@ document.getElementById("selectDatesButton")?.addEventListener("click", () => {
     }
   });
 });
+
+document.getElementById("setAdultsButton")?.addEventListener("click", () => {
+  sendToContent({
+    type: "SET_ADULTS",
+    payload: {
+      adults: 2
+    }
+  });
+});
+
+document.getElementById("guestDoneButton")?.addEventListener("click", () => {
+  sendToContent({
+    type: "CLICK_GUEST_DONE"
+  });
+});
+
+document.getElementById("searchButton")?.addEventListener("click", () => {
+  sendToContent({
+    type: "CLICK_SEARCH"
+  });
+});
+
+document.getElementById("runFlowButton")?.addEventListener("click", () => {
+  sendToContent({
+    type: "RUN_BOOKING_FLOW",
+    payload: {
+      destination: "Paris",
+      checkIn: "2026-07-10",
+      checkOut: "2026-07-15",
+      adults: 2
+    }
+  });
+});
