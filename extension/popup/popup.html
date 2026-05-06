@@ -43,6 +43,13 @@
         margin-top: 10px;
         font-size: 12px;
       }
+
+      textarea {
+        width: 100%;
+        padding: 6px;
+        box-sizing: border-box;
+        font-size: 12px;
+      }
     </style>
   </head>
 
@@ -67,6 +74,21 @@
     <div class="field">
       <label>Adults</label>
       <input id="adultsInput" type="number" value="2" min="1" />
+    </div>
+
+    <div class="field">
+      <label>Booking Payload JSON</label>
+      <textarea id="payloadTextarea" rows="8">
+    {
+      "site": "booking.com",
+      "payload": {
+        "destination": "Paris",
+        "checkIn": "2026-07-10",
+        "checkOut": "2026-07-15",
+        "adults": 2
+      }
+    }
+      </textarea>
     </div>
 
     <button id="runFlowButton">

@@ -29,25 +29,47 @@ async function sendToContent(message) {
   });
 }
 
-function getInputValues() {
-  return {
-    destination: document.getElementById("destinationInput").value,
-    checkIn: document.getElementById("checkInInput").value,
-    checkOut: document.getElementById("checkOutInput").value,
-    adults: parseInt(
-      document.getElementById("adultsInput").value,
-      10
-    )
-  };
+function getPayloadFromTextarea() {
+  const raw = document.getElementById("payloadTextarea").value;
+
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    result.textContent = JSON.stringify(
+      {
+        ok: false,
+        error: "Invalid JSON payload"
+      },
+      null,
+      2
+    );
+
+    return null;
+  }
 }
 
 document.getElementById("runFlowButton")
   ?.addEventListener("click", () => {
+    const request = getPayloadFromTextarea();
 
-    const payload = getInputValues();
+    if (!request) {
+      return;
+    }
+
+    if (request.site !== "booking.com") {
+      result.textContent = JSON.stringify(
+        {
+          ok: false,
+          error: `Unsupported site: ${request.site}`
+        },
+        null,
+        2
+      );
+      return;
+    }
 
     sendToContent({
       type: "RUN_BOOKING_FLOW",
-      payload
+      payload: request.payload
     });
-});
+  });
