@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# 환경변수
+.env
+env.sh
+
+# 런타임 생성 output
+booking-agent/output/
+
+# AI 도구
+.agents/
+.codex/
