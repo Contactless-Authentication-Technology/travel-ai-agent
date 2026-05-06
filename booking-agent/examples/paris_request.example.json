@@ -1,0 +1,13 @@
+{
+  "destination": "Paris",
+  "departureAirport": "ICN",
+  "arrivalAirport": "CDG",
+  "departureDate": "2026-07-10",
+  "returnDate": "2026-07-15",
+  "adults": 2,
+  "children": 0,
+  "budgetKRW": 2000000,
+  "hotelArea": "Eiffel Tower",
+  "hotelPreference": ["near_metro", "breakfast_included"],
+  "seatPreference": "economy"
+}

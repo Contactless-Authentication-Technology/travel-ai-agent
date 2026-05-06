@@ -1,0 +1,61 @@
+{
+  "type": "object",
+  "required": [
+    "destination",
+    "departureAirport",
+    "arrivalAirport",
+    "departureDate",
+    "returnDate",
+    "adults"
+  ],
+  "properties": {
+    "destination": {
+      "type": "string",
+      "example": "Paris"
+    },
+    "departureAirport": {
+      "type": "string",
+      "example": "ICN"
+    },
+    "arrivalAirport": {
+      "type": "string",
+      "example": "CDG"
+    },
+    "departureDate": {
+      "type": "string",
+      "format": "date",
+      "example": "2026-07-10"
+    },
+    "returnDate": {
+      "type": "string",
+      "format": "date",
+      "example": "2026-07-15"
+    },
+    "adults": {
+      "type": "integer",
+      "minimum": 1,
+      "example": 2
+    },
+    "children": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0
+    },
+    "budgetKRW": {
+      "type": "integer",
+      "example": 2000000
+    },
+    "hotelArea": {
+      "type": "string",
+      "example": "Eiffel Tower"
+    },
+    "hotelPreference": {
+      "type": "string",
+      "example": "near metro, breakfast included"
+    },
+    "seatPreference": {
+      "type": "string",
+      "example": "economy"
+    }
+  }
+}
