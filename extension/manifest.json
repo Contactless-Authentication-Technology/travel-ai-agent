@@ -17,7 +17,7 @@
         "https://www.koreanair.com/*",
         "https://www.booking.com/*"
       ],
-      "js": ["content/content.js"]
+      "js": ["content/booking-com.js", "content/content.js"]
     }
   ],
   "action": {
