@@ -21,7 +21,7 @@ function setNativeValue(element, value) {
   element.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-function fillDestination(destination) {
+async function fillDestination(destination) {
   const input =
     document.querySelector('input[name="ss"]') ||
     document.querySelector('[data-testid="destination-container"] input');
@@ -32,6 +32,19 @@ function fillDestination(destination) {
 
   input.focus();
   setNativeValue(input, destination);
+
+  await wait(1000);
+
+  const firstSuggestion =
+    document.querySelector('[data-testid="autocomplete-result"]') ||
+    document.querySelector('[data-testid="destination-container"] [role="option"]') ||
+    document.querySelector('li[id^="autocomplete"] [role="option"]') ||
+    document.querySelector('[data-testid="internal-input-container"] ~ ul li:first-child');
+
+  if (firstSuggestion) {
+    firstSuggestion.click();
+    await wait(500);
+  }
 
   return { ok: true, field: "destination", value: destination };
 }
@@ -52,6 +65,42 @@ async function openDatePicker() {
   return { ok: true };
 }
 
+function getCalendarDateButtons() {
+  return Array.from(document.querySelectorAll("[data-date]"));
+}
+
+function getVisibleDateRange() {
+  const dates = getCalendarDateButtons()
+    .map((button) => button.getAttribute("data-date"))
+    .filter(Boolean)
+    .sort();
+
+  if (dates.length === 0) {
+    return null;
+  }
+
+  return {
+    first: dates[0],
+    last: dates[dates.length - 1]
+  };
+}
+
+function getNextMonthButton() {
+  return (
+    document.querySelector('[data-testid="calendar-arrow-right"]') ||
+    document.querySelector('button[aria-label*="Next"]') ||
+    document.querySelector('button[aria-label*="다음"]')
+  );
+}
+
+function getPrevMonthButton() {
+  return (
+    document.querySelector('[data-testid="calendar-arrow-left"]') ||
+    document.querySelector('button[aria-label*="Previous"]') ||
+    document.querySelector('button[aria-label*="이전"]')
+  );
+}
+
 async function findDateButtonWithNavigation(date, maxClicks = 12) {
   for (let i = 0; i <= maxClicks; i++) {
     const dateButton = findDateButton(date);
@@ -60,17 +109,37 @@ async function findDateButtonWithNavigation(date, maxClicks = 12) {
       return dateButton;
     }
 
-    const nextButton =
-      document.querySelector('[data-testid="calendar-arrow-right"]') ||
-      document.querySelector('button[aria-label*="Next"]') ||
-      document.querySelector('button[aria-label*="다음"]');
+    const range = getVisibleDateRange();
 
-    if (!nextButton) {
+    if (!range) {
       return null;
     }
 
-    nextButton.click();
-    await wait(500);
+    if (date < range.first) {
+      const prevButton = getPrevMonthButton();
+
+      if (!prevButton) {
+        return null;
+      }
+
+      prevButton.click();
+      await wait(500);
+      continue;
+    }
+
+    if (date > range.last) {
+      const nextButton = getNextMonthButton();
+
+      if (!nextButton) {
+        return null;
+      }
+
+      nextButton.click();
+      await wait(500);
+      continue;
+    }
+
+    return null;
   }
 
   return null;
@@ -134,22 +203,49 @@ async function openGuestSelector() {
   return { ok: true };
 }
 
-function getAdultCountElement() {
-  return document.querySelector('[data-testid="occupancy-popup"] span');
+function simulateClick(element) {
+  const rect = element.getBoundingClientRect();
+  const x = rect.left + rect.width / 2;
+  const y = rect.top + rect.height / 2;
+  const props = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y };
+
+  element.dispatchEvent(new PointerEvent("pointerdown", props));
+  element.dispatchEvent(new MouseEvent("mousedown", props));
+  element.dispatchEvent(new PointerEvent("pointerup", props));
+  element.dispatchEvent(new MouseEvent("mouseup", props));
+  element.dispatchEvent(new MouseEvent("click", props));
 }
 
-function getAdultPlusButton() {
-  return document.querySelector(
-    '[data-testid="occupancy-popup"] button[aria-label*="성인 수 증가"], ' +
-    '[data-testid="occupancy-popup"] button[aria-label*="Increase adults"]'
+function getOccupancyIconButtons() {
+  const popup = document.querySelector('[data-testid="occupancy-popup"]');
+
+  if (!popup) return null;
+
+  // 순서: 성인-, 성인+, 어린이-, 어린이+, 객실-, 객실+
+  return Array.from(popup.querySelectorAll("button")).filter(
+    (b) => !b.textContent.trim()
+  );
+}
+
+function getAdultCountElement() {
+  const popup = document.querySelector('[data-testid="occupancy-popup"]');
+
+  if (!popup) return null;
+
+  // 숫자만 있는 span 중 첫 번째 = 성인 수 (aria-hidden 무관하게 첫 번째)
+  return Array.from(popup.querySelectorAll("span")).find((el) =>
+    /^\d+$/.test(el.textContent.trim())
   );
 }
 
 function getAdultMinusButton() {
-  return document.querySelector(
-    '[data-testid="occupancy-popup"] button[aria-label*="성인 수 감소"], ' +
-    '[data-testid="occupancy-popup"] button[aria-label*="Decrease adults"]'
-  );
+  const buttons = getOccupancyIconButtons();
+  return buttons?.[0] || null;
+}
+
+function getAdultPlusButton() {
+  const buttons = getOccupancyIconButtons();
+  return buttons?.[1] || null;
 }
 
 async function setAdultCount(targetAdults) {
@@ -171,61 +267,81 @@ async function setAdultCount(targetAdults) {
     return { ok: false, error: "Failed to read adult count" };
   }
 
-  const plusButton = getAdultPlusButton();
-  const minusButton = getAdultMinusButton();
+  const MAX_CLICKS = 10;
 
-  if (!plusButton || !minusButton) {
-    return { ok: false, error: "Plus/Minus button not found" };
+  for (let i = 0; current < targetAdults && i < MAX_CLICKS; i++) {
+    const plusButton = getAdultPlusButton();
+    console.log("[Travel Agent] plus button:", plusButton, "current:", current);
+
+    if (!plusButton) {
+      return { ok: false, error: "Plus button not found" };
+    }
+
+    simulateClick(plusButton);
+    await wait(400);
+
+    const updated = getAdultCountElement();
+    const next = parseInt(updated?.textContent.trim(), 10);
+    console.log("[Travel Agent] after click, count element:", updated, "next:", next);
+
+    if (isNaN(next) || next === current) {
+      return { ok: false, error: `Adult count stuck at ${current}` };
+    }
+
+    current = next;
   }
 
-  while (current < targetAdults) {
-    plusButton.click();
-    current++;
-    await wait(300);
+  for (let i = 0; current > targetAdults && i < MAX_CLICKS; i++) {
+    const minusButton = getAdultMinusButton();
+
+    if (!minusButton) {
+      return { ok: false, error: "Minus button not found" };
+    }
+
+    simulateClick(minusButton);
+    await wait(400);
+
+    const updated = getAdultCountElement();
+    const next = parseInt(updated?.textContent.trim(), 10);
+
+    if (isNaN(next) || next === current) {
+      return { ok: false, error: `Adult count stuck at ${current}` };
+    }
+
+    current = next;
   }
 
-  while (current > targetAdults) {
-    minusButton.click();
-    current--;
-    await wait(300);
-  }
-
-  return {
-    ok: true,
-    field: "adults",
-    value: targetAdults
-  };
+  return { ok: true, field: "adults", value: targetAdults };
 }
 
 async function clickGuestDoneButton() {
-  const buttons = Array.from(document.querySelectorAll("button"));
+  const popup = document.querySelector('[data-testid="occupancy-popup"]');
 
-  const doneButton = buttons.find((button) => {
-    const text = button.textContent.trim();
-    return text === "완료" || text === "Done";
-  });
+  if (!popup) {
+    return { ok: false, error: "Occupancy popup not found" };
+  }
+
+  const doneButton =
+    popup.querySelector('[data-testid="occupancy-popup-continue-button"]') ||
+    Array.from(popup.querySelectorAll("button")).find((btn) => {
+      const text = btn.textContent.trim();
+      return text === "완료" || text === "Done" || text === "확인";
+    });
 
   if (!doneButton) {
     return { ok: false, error: "Guest done button not found" };
   }
 
   doneButton.click();
-  await wait(500);
+  await wait(300);
 
-  return {
-    ok: true,
-    field: "guestDone",
-    text: doneButton.textContent.trim()
-  };
+  return { ok: true };
 }
 
 async function clickSearchButton() {
   const searchButton =
-    document.querySelector('button[type="submit"]') ||
-    document.querySelector('[data-testid="searchbox-submit-button"]') ||
-    Array.from(document.querySelectorAll("button")).find(
-      (button) => button.textContent.trim() === "검색"
-    );
+    document.querySelector('[data-testid="search-button"]') ||
+    document.querySelector('button[type="submit"]');
 
   if (!searchButton) {
     return { ok: false, error: "Search button not found" };
@@ -233,27 +349,60 @@ async function clickSearchButton() {
 
   searchButton.click();
 
-  return { ok: true, field: "search" };
+  return { ok: true };
 }
 
 async function runBookingFlow(data) {
-  await wait(500);
+  try {
+    console.log("[Travel Agent] Run booking flow:", data);
 
-  fillDestination(data.destination);
-  await wait(800);
+    const destinationResult = await fillDestination(data.destination);
 
-  await selectBookingDates(data.checkIn, data.checkOut);
-  await wait(800);
+    if (!destinationResult.ok) {
+      return destinationResult;
+    }
 
-  await setAdultCount(data.adults);
-  await wait(800);
+    await wait(800);
 
-  await clickGuestDoneButton();
-  await wait(500);
+    const datesResult = await selectBookingDates(
+      data.checkIn,
+      data.checkOut
+    );
 
-  await clickSearchButton();
+    if (!datesResult.ok) {
+      return datesResult;
+    }
 
-  return { ok: true };
+    await wait(800);
+
+    const adultsResult = await setAdultCount(data.adults);
+
+    if (!adultsResult.ok) {
+      return adultsResult;
+    }
+
+    await wait(800);
+
+    const doneResult = await clickGuestDoneButton();
+
+    if (!doneResult.ok) {
+      return doneResult;
+    }
+
+    await wait(500);
+
+    const searchResult = await clickSearchButton();
+
+    return searchResult;
+
+  } catch (error) {
+    console.error("[Travel Agent] Flow failed:", error);
+
+    return {
+      ok: false,
+      error: error.message
+    };
+  }
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -268,9 +417,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "FILL_DESTINATION") {
-    const result = fillDestination(message.payload.destination);
-    sendResponse(result);
-    return;
+    fillDestination(message.payload.destination).then(sendResponse);
+    return true;
   }
 
   if (message.type === "SELECT_BOOKING_DATES") {

@@ -13,62 +13,41 @@ async function sendToContent(message) {
   const tab = await getActiveTab();
 
   chrome.tabs.sendMessage(tab.id, message, (response) => {
+    if (chrome.runtime.lastError) {
+      result.textContent = JSON.stringify(
+        {
+          ok: true,
+          warning: chrome.runtime.lastError.message
+        },
+        null,
+        2
+      );
+      return;
+    }
+
     result.textContent = JSON.stringify(response, null, 2);
   });
 }
 
-document.getElementById("pingButton")?.addEventListener("click", () => {
-  sendToContent({ type: "PING" });
-});
+function getInputValues() {
+  return {
+    destination: document.getElementById("destinationInput").value,
+    checkIn: document.getElementById("checkInInput").value,
+    checkOut: document.getElementById("checkOutInput").value,
+    adults: parseInt(
+      document.getElementById("adultsInput").value,
+      10
+    )
+  };
+}
 
-document.getElementById("fillDestinationButton")?.addEventListener("click", () => {
-  sendToContent({
-    type: "FILL_DESTINATION",
-    payload: {
-      destination: "Paris"
-    }
-  });
-});
+document.getElementById("runFlowButton")
+  ?.addEventListener("click", () => {
 
-document.getElementById("selectDatesButton")?.addEventListener("click", () => {
-  sendToContent({
-    type: "SELECT_BOOKING_DATES",
-    payload: {
-      checkIn: "2026-07-10",
-      checkOut: "2026-07-15"
-    }
-  });
-});
+    const payload = getInputValues();
 
-document.getElementById("setAdultsButton")?.addEventListener("click", () => {
-  sendToContent({
-    type: "SET_ADULTS",
-    payload: {
-      adults: 2
-    }
-  });
-});
-
-document.getElementById("guestDoneButton")?.addEventListener("click", () => {
-  sendToContent({
-    type: "CLICK_GUEST_DONE"
-  });
-});
-
-document.getElementById("searchButton")?.addEventListener("click", () => {
-  sendToContent({
-    type: "CLICK_SEARCH"
-  });
-});
-
-document.getElementById("runFlowButton")?.addEventListener("click", () => {
-  sendToContent({
-    type: "RUN_BOOKING_FLOW",
-    payload: {
-      destination: "Paris",
-      checkIn: "2026-07-10",
-      checkOut: "2026-07-15",
-      adults: 2
-    }
-  });
+    sendToContent({
+      type: "RUN_BOOKING_FLOW",
+      payload
+    });
 });
