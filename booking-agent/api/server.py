@@ -6,6 +6,7 @@ import sys
 from uuid import uuid4
 
 from fastapi import FastAPI
+from fastapi import Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -40,6 +41,7 @@ SESSION_STATE = {
     "travelRequest": None,
     "payload": None,
     "recommendations": [],
+    "roomOptions": [],
     "selectedHotelIndex": None,
     "lastCommand": None,
     "lastResult": None,
@@ -51,6 +53,14 @@ SESSION_STATE = {
 }
 
 COMMAND_QUEUE = deque()
+
+COMMAND_PAGE_RULES = {
+    "RUN_BOOKING_FLOW": ["other", "search_results"],
+    "GET_TOP_HOTEL_RECOMMENDATIONS": ["search_results"],
+    "CLICK_BEST_MATCHED_HOTEL": ["search_results"],
+    "CONFIRM_SPECIFIC_HOTEL_SELECTION": ["search_results"],
+    "EXTRACT_ROOM_OPTIONS": ["hotel_detail"]
+}
 
 
 class TravelRequestInput(BaseModel):
@@ -147,14 +157,30 @@ def enqueue_command(command: CommandInput):
 
 
 @app.get("/api/commands/next")
-def get_next_command():
+def get_next_command(page_type: str = Query(default="other")):
     if not COMMAND_QUEUE:
-      return {
-          "ok": True,
-          "command": None
-      }
+        return {
+            "ok": True,
+            "command": None
+        }
 
-    command = COMMAND_QUEUE.popleft()
+    matched_index = None
+
+    for index, command in enumerate(COMMAND_QUEUE):
+        allowed_page_types = COMMAND_PAGE_RULES.get(command["action"])
+
+        if not allowed_page_types or page_type in allowed_page_types:
+            matched_index = index
+            break
+
+    if matched_index is None:
+        return {
+            "ok": True,
+            "command": None
+        }
+
+    command = COMMAND_QUEUE[matched_index]
+    del COMMAND_QUEUE[matched_index]
     command["status"] = "in_progress"
     return {
         "ok": True,
@@ -190,6 +216,14 @@ def complete_command(command_id: str, completion: CommandCompletion):
         command_response.get("ok")
     ):
         SESSION_STATE["selectedHotelIndex"] = command_response.get("hotelIndex")
+
+    if (
+        command_action == "EXTRACT_ROOM_OPTIONS" and
+        command_response.get("ok")
+    ):
+        SESSION_STATE["roomOptions"] = deepcopy(
+            command_response.get("roomOptions", [])
+        )
 
     if command_action == "CONFIRM_SPECIFIC_HOTEL_SELECTION":
         SESSION_STATE["selectedHotelIndex"] = completion.result.get(

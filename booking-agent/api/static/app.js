@@ -1,6 +1,7 @@
 const requestInput = document.getElementById("requestInput");
 const resultView = document.getElementById("resultView");
 const recommendationsRoot = document.getElementById("recommendations");
+const roomOptionsRoot = document.getElementById("roomOptions");
 const requestSummaryRoot = document.getElementById("requestSummary");
 const agentStatusValue = document.getElementById("agentStatusValue");
 const agentStatusMeta = document.getElementById("agentStatusMeta");
@@ -142,6 +143,39 @@ function renderRecommendations(recommendations) {
     });
 }
 
+function renderRoomOptions(roomOptions) {
+  if (!roomOptions?.length) {
+    roomOptionsRoot.innerHTML = `
+      <div class="subtle">아직 객실 옵션이 없습니다. 호텔 상세 페이지에서 객실 옵션을 불러와 주세요.</div>
+    `;
+    return;
+  }
+
+  roomOptionsRoot.innerHTML = roomOptions.map((option, index) => {
+    const badges = [];
+
+    if (option.breakfastIncluded) badges.push("조식 포함");
+    if (option.freeCancellation) badges.push("무료 취소");
+    if (option.payLater) badges.push("현장 결제 가능");
+    if (option.highlights?.length) {
+      option.highlights.forEach((item) => badges.push(item));
+    }
+
+    return `
+      <div class="room-option">
+        <div><strong>옵션 ${index + 1}</strong> · ${escapeHtml(option.roomName)}</div>
+        <div class="subtle" style="margin-top: 6px; font-size: 15px; color: #152033; font-weight: 700;">
+          ${escapeHtml(option.displayPrice || option.price || "가격 정보 없음")}
+        </div>
+        <div class="badge-row" style="margin-top: 8px;">
+          ${badges.length ? badges.map((badge) => `<span class="badge">${escapeHtml(badge)}</span>`).join("") : '<span class="badge">추가 정보 없음</span>'}
+        </div>
+        <div class="reason-list">${escapeHtml(option.optionSummary || option.text || "")}</div>
+      </div>
+    `;
+  }).join("");
+}
+
 function renderAgentStatus(session) {
   const status = session?.agentStatus;
 
@@ -163,6 +197,7 @@ async function refreshSession() {
   selectedHotelIndex = sessionState.selectedHotelIndex;
   renderRequestSummary(sessionState);
   renderRecommendations(sessionState.recommendations || []);
+  renderRoomOptions(sessionState.roomOptions || []);
   renderAgentStatus(sessionState);
 
   if (sessionState.lastResult) {
@@ -234,6 +269,10 @@ document.getElementById("confirmHotelButton").addEventListener("click", async ()
   await enqueueCommand("CONFIRM_SPECIFIC_HOTEL_SELECTION", {
     hotelIndex: selectedHotelIndex
   });
+});
+
+document.getElementById("extractRoomsButton").addEventListener("click", async () => {
+  await enqueueCommand("EXTRACT_ROOM_OPTIONS");
 });
 
 refreshSession();

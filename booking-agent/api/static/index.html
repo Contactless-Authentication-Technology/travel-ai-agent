@@ -206,6 +206,17 @@
         line-height: 1.5;
       }
 
+      .room-option {
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 14px;
+        background: #fbfdff;
+      }
+
+      .room-option + .room-option {
+        margin-top: 10px;
+      }
+
       pre {
         margin: 0;
         white-space: pre-wrap;
@@ -274,6 +285,7 @@
             </div>
             <div class="button-row">
               <button id="confirmHotelButton">선택한 호텔 열기</button>
+              <button id="extractRoomsButton" class="secondary">객실 옵션 불러오기</button>
             </div>
             <div id="recommendations" class="recommendations" style="margin-top: 14px;"></div>
           </section>
@@ -283,6 +295,11 @@
           <section class="panel">
             <h2>현재 요청 요약</h2>
             <div id="requestSummary" class="summary-list"></div>
+          </section>
+
+          <section class="panel">
+            <h2>객실 옵션</h2>
+            <div id="roomOptions" class="subtle">아직 객실 옵션을 불러오지 않았습니다.</div>
           </section>
 
           <section class="panel">

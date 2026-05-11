@@ -428,6 +428,57 @@ function parsePriceValue(priceText) {
   return Number(digits);
 }
 
+function extractCurrencyAmount(text = "") {
+  const normalized = text.replace(/\s+/g, " ");
+  const match = normalized.match(/[₩$€]\s?[\d,]+/);
+  return match ? match[0].replace(/\s+/g, "") : null;
+}
+
+function cleanRoomName(text = "") {
+  return text
+    .replace(/\s+/g, " ")
+    .replace(/남은 객실.*$/g, "")
+    .replace(/선호 침대 선택.*$/g, "")
+    .replace(/최대 투숙 인원.*$/g, "")
+    .trim();
+}
+
+function buildRoomSummaryText(text = "") {
+  return text
+    .replace(/\s+/g, " ")
+    .replace(/#policyModal_[^\s]+/g, "")
+    .replace(/\{[^}]+\}/g, "")
+    .replace(/opacity:\s*[\d.]+;?/g, "")
+    .replace(/Booking\.com에서 부담.*?(?=총 요금|조식 포함|무료 취소|$)/g, "")
+    .replace(/숙소 측에서 제공하는 할인.*?(?=총 요금|조식 포함|무료 취소|$)/g, "")
+    .replace(/기존 요금 [₩$€\d, ]+/g, "")
+    .replace(/현재 요금 [₩$€\d, ]+/g, "")
+    .replace(/총 요금 [₩$€\d, +세금및기타요금()]+/g, "")
+    .trim();
+}
+
+function extractRoomHighlights(normalizedText) {
+  const highlights = [];
+
+  if (includesAnyKeyword(normalizedText, ["더블침대"])) {
+    highlights.push("더블침대");
+  }
+  if (includesAnyKeyword(normalizedText, ["싱글침대"])) {
+    highlights.push("싱글침대");
+  }
+  if (includesAnyKeyword(normalizedText, ["도시 전망"])) {
+    highlights.push("도시 전망");
+  }
+  if (includesAnyKeyword(normalizedText, ["무료 wifi", "무료 wi-fi"])) {
+    highlights.push("무료 Wi-Fi");
+  }
+  if (includesAnyKeyword(normalizedText, ["전용 욕실"])) {
+    highlights.push("전용 욕실");
+  }
+
+  return highlights;
+}
+
 function normalizeHotelText(text = "") {
   return text
     .toLowerCase()
@@ -823,6 +874,165 @@ function clickBestMatchedHotel(preferences = []) {
     preferences,
     reasons: bestHotel.reasons,
     hotelIndex: bestHotel.index
+  });
+}
+
+function extractRoomOptions() {
+  startAutomationSession("extract_room_options");
+
+  const availabilityTables = [
+    ...Array.from(document.querySelectorAll('[data-testid="availability-table"]')),
+    ...Array.from(document.querySelectorAll("table")).filter((table) =>
+      table.textContent?.includes("객실 유형") ||
+      table.textContent?.includes("선택사항") ||
+      table.textContent?.includes("객실 선택")
+    )
+  ];
+
+  logAutomation("rooms.table_candidates", {
+    count: availabilityTables.length,
+    candidates: availabilityTables.slice(0, 5).map((table, index) => ({
+      index,
+      textPreview: table.textContent?.trim().replace(/\s+/g, " ").slice(0, 220) || "",
+      rowCount: table.querySelectorAll("tr").length
+    }))
+  });
+
+  const availabilityTable = availabilityTables[0];
+
+  if (!availabilityTable) {
+    return buildErrorResult("Room options not found on current page", {
+      url: window.location.href
+    });
+  }
+
+  const rows = Array.from(availabilityTable.querySelectorAll("tbody tr"));
+
+  logAutomation("rooms.table_rows", {
+    rowCount: rows.length,
+    rows: rows.slice(0, 8).map((row, index) => {
+      const cells = Array.from(row.querySelectorAll("td"));
+      return {
+        index,
+        cellCount: cells.length,
+        hasSelect: !!row.querySelector("select"),
+        hasPriceLikeText: /₩|\$|€|krw|usd|eur/i.test(row.textContent || ""),
+        textPreview: row.textContent?.trim().replace(/\s+/g, " ").slice(0, 180) || ""
+      };
+    })
+  });
+
+  const roomOptions = [];
+  let currentRoomName = null;
+
+  rows.forEach((row) => {
+    const cells = Array.from(row.querySelectorAll("td"));
+
+    if (!cells.length) {
+      return;
+    }
+
+    const cellTexts = cells.map((cell) =>
+      cell.textContent?.trim().replace(/\s+/g, " ") || ""
+    );
+    const rowText = row.textContent?.trim().replace(/\s+/g, " ") || "";
+    const normalizedRowText = normalizeHotelText(rowText);
+
+    const roomNameCandidate =
+      cells[0]?.querySelector("a, span, div, h3, h4")?.textContent?.trim() ||
+      cellTexts[0];
+
+    if (
+      roomNameCandidate &&
+      roomNameCandidate.length > 3 &&
+      !/객실 유형|선택사항|객실 선택|최대 투숙 인원|총 요금/.test(roomNameCandidate) &&
+      !/₩|\$|€|krw|usd|eur/i.test(roomNameCandidate)
+    ) {
+      currentRoomName = roomNameCandidate;
+    }
+
+    const priceCell = cells.find((cell) =>
+      /₩|\$|€|krw|usd|eur/i.test(cell.textContent || "")
+    ) || null;
+    const optionCell = cells.find((cell) =>
+      includesAnyKeyword(normalizeHotelText(cell.textContent || ""), [
+        "조식",
+        "무료 취소",
+        "환불 불가",
+        "현장 결제",
+        "숙소에서 결제",
+        "선결제 필요 없음",
+        "포함사항"
+      ])
+    ) || null;
+    const selectCell = cells.find((cell) => cell.querySelector("select")) || null;
+
+    const looksLikeOptionRow =
+      !!priceCell &&
+      !!selectCell;
+
+    if (!looksLikeOptionRow) {
+      return;
+    }
+
+    const combinedText = rowText;
+
+    roomOptions.push({
+      index: roomOptions.length,
+      roomName: cleanRoomName(currentRoomName || `객실 옵션 ${roomOptions.length + 1}`),
+      price:
+        Array.from((priceCell || row).querySelectorAll("span, div")).find((el) =>
+          /₩|\$|€|krw|usd|eur/i.test(el.textContent || "")
+        )?.textContent?.trim() ||
+        priceCell?.textContent?.trim().replace(/\s+/g, " ") ||
+        "가격 정보 없음",
+      displayPrice:
+        extractCurrencyAmount(
+          Array.from((priceCell || row).querySelectorAll("span, div"))
+            .map((el) => el.textContent?.trim() || "")
+            .join(" ")
+        ) ||
+        extractCurrencyAmount(priceCell?.textContent || "") ||
+        "가격 정보 없음",
+      text: buildRoomSummaryText(combinedText),
+      breakfastIncluded: includesAnyKeyword(normalizedRowText, [
+        "조식 포함",
+        "조식 제공",
+        "breakfast included",
+        "breakfast"
+      ]),
+      freeCancellation: includesAnyKeyword(normalizedRowText, [
+        "무료 취소",
+        "free cancellation",
+        "취소 가능"
+      ]),
+      payLater: includesAnyKeyword(normalizedRowText, [
+        "현장 결제",
+        "pay later",
+        "no prepayment",
+        "선결제 필요 없음",
+        "숙소에서 결제"
+      ]),
+      hasSelector: !!selectCell,
+      optionSummary:
+        buildRoomSummaryText(optionCell?.textContent?.trim().replace(/\s+/g, " ") || ""),
+      highlights: extractRoomHighlights(normalizedRowText)
+    });
+  });
+
+  if (!roomOptions.length) {
+    return buildErrorResult("Room option rows were not detected", {
+      url: window.location.href
+    });
+  }
+
+  logAutomation("rooms.extracted", {
+    count: roomOptions.length,
+    roomNames: roomOptions.map((option) => option.roomName)
+  });
+
+  return buildSuccessResult({
+    roomOptions
   });
 }
 

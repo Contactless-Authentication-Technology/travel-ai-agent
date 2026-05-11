@@ -3,6 +3,52 @@ console.log("[Travel Agent] Content script loaded");
 const DASHBOARD_API_BASE = "http://127.0.0.1:8000/api";
 let isDashboardCommandRunning = false;
 
+function getBookingPageType() {
+  const url = window.location.href;
+
+  if (url.includes("/searchresults")) {
+    return "search_results";
+  }
+
+  if (url.includes("/hotel/")) {
+    return "hotel_detail";
+  }
+
+  return "other";
+}
+
+function getPageGuardResult(commandAction) {
+  const pageType = getBookingPageType();
+
+  const pageRules = {
+    RUN_BOOKING_FLOW: ["other", "search_results"],
+    GET_TOP_HOTEL_RECOMMENDATIONS: ["search_results"],
+    CLICK_BEST_MATCHED_HOTEL: ["search_results"],
+    CONFIRM_SPECIFIC_HOTEL_SELECTION: ["search_results"],
+    EXTRACT_ROOM_OPTIONS: ["hotel_detail"]
+  };
+
+  const allowedPageTypes = pageRules[commandAction];
+
+  if (!allowedPageTypes) {
+    return { allowed: true };
+  }
+
+  if (allowedPageTypes.includes(pageType)) {
+    return { allowed: true };
+  }
+
+  return {
+    allowed: false,
+    response: {
+      ok: false,
+      error: `Command ${commandAction} is not allowed on ${pageType} page`,
+      pageType,
+      url: window.location.href
+    }
+  };
+}
+
 async function dashboardFetch(path, options = {}) {
   const response = await fetch(`${DASHBOARD_API_BASE}${path}`, {
     headers: {
@@ -37,6 +83,12 @@ async function reportAgentHeartbeat() {
 }
 
 async function executeDashboardCommand(command) {
+  const pageGuard = getPageGuardResult(command.action);
+
+  if (!pageGuard.allowed) {
+    return pageGuard.response;
+  }
+
   switch (command.action) {
     case "RUN_BOOKING_FLOW":
       return runBookingFlow(command.payload);
@@ -49,6 +101,8 @@ async function executeDashboardCommand(command) {
       return clickBestMatchedHotel(command.payload?.hotelPreference || []);
     case "CONFIRM_SPECIFIC_HOTEL_SELECTION":
       return confirmSpecificHotelSelection(command.payload?.hotelIndex);
+    case "EXTRACT_ROOM_OPTIONS":
+      return extractRoomOptions();
     default:
       return {
         ok: false,
@@ -69,7 +123,8 @@ async function pollDashboardCommands() {
   isDashboardCommandRunning = true;
 
   try {
-    const data = await dashboardFetch("/commands/next");
+    const pageType = getBookingPageType();
+    const data = await dashboardFetch(`/commands/next?page_type=${encodeURIComponent(pageType)}`);
     const command = data.command;
 
     if (!command) {
@@ -179,6 +234,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "CONFIRM_SPECIFIC_HOTEL_SELECTION") {
     confirmSpecificHotelSelection(message.payload?.hotelIndex).then(sendResponse);
     return true;
+  }
+
+  if (message.type === "EXTRACT_ROOM_OPTIONS") {
+    const result = extractRoomOptions();
+    sendResponse(result);
+    return;
   }
 
   if (message.type === "CONFIRM_HOTEL_SELECTION") {
