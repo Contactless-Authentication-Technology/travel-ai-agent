@@ -48,6 +48,33 @@ function getPayloadFromTextarea() {
   }
 }
 
+function buildMockPayload() {
+  return {
+    site: "booking.com",
+    payload: {
+      destination: "Paris",
+      checkIn: "2026-07-10",
+      checkOut: "2026-07-15",
+      adults: 2
+    }
+  };
+}
+
+document
+  .getElementById("convertRequestButton")
+  ?.addEventListener("click", () => {
+
+    const payload = buildMockPayload();
+
+    document.getElementById(
+      "payloadTextarea"
+    ).value = JSON.stringify(
+      payload,
+      null,
+      2
+    );
+  });
+
 document.getElementById("runFlowButton")
   ?.addEventListener("click", () => {
     const request = getPayloadFromTextarea();
