@@ -50,11 +50,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "CLICK_FIRST_HOTEL") {
-    const result = clickFirstHotelCard();
-
-    sendResponse(result);
-
-    return;
+    clickFirstHotelCard().then(sendResponse);
+    return true;
   }
 
   if (message.type === "CLICK_BEST_MATCHED_HOTEL") {
@@ -67,11 +64,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
 
-  if (message.type === "CONFIRM_HOTEL_SELECTION") {
-    const result = confirmRecommendedHotelSelection();
+  if (message.type === "GET_TOP_HOTEL_RECOMMENDATIONS") {
+    const result = getTopHotelRecommendations(
+      message.payload?.hotelPreference || [],
+      message.payload?.limit || 3
+    );
 
     sendResponse(result);
 
     return;
   }
+
+  if (message.type === "CONFIRM_SPECIFIC_HOTEL_SELECTION") {
+    confirmSpecificHotelSelection(message.payload?.hotelIndex).then(sendResponse);
+    return true;
+  }
+
+  if (message.type === "CONFIRM_HOTEL_SELECTION") {
+    confirmRecommendedHotelSelection().then(sendResponse);
+    return true;
+  }
+
 });

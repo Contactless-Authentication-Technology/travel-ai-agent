@@ -1,4 +1,8 @@
 const result = document.getElementById("result");
+const recommendationsContainer = document.getElementById("recommendations");
+const recommendationHelper = document.getElementById("recommendationHelper");
+let selectedRecommendationIndex = null;
+let latestRecommendations = [];
 
 async function getActiveTab() {
   const [tab] = await chrome.tabs.query({
@@ -12,26 +16,95 @@ async function getActiveTab() {
 async function sendToContent(message) {
   const tab = await getActiveTab();
 
-  chrome.tabs.sendMessage(tab.id, message, (response) => {
-    if (chrome.runtime.lastError) {
-      result.textContent = JSON.stringify(
-        {
+  return new Promise((resolve) => {
+    chrome.tabs.sendMessage(tab.id, message, (response) => {
+      if (chrome.runtime.lastError) {
+        const errorResponse = {
           ok: false,
           warning: chrome.runtime.lastError.message
-        },
+        };
+
+        result.textContent = JSON.stringify(
+          errorResponse,
+          null,
+          2
+        );
+        resolve(errorResponse);
+        return;
+      }
+
+      result.textContent = JSON.stringify(
+        response,
         null,
         2
       );
-
-      return;
-    }
-
-    result.textContent = JSON.stringify(
-      response,
-      null,
-      2
-    );
+      resolve(response);
+    });
   });
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function renderRecommendations(recommendations = []) {
+  latestRecommendations = recommendations;
+
+  if (!recommendations.length) {
+    recommendationsContainer.innerHTML = "";
+    recommendationHelper.textContent =
+      "추천 결과가 아직 없습니다. 검색 결과 페이지에서 추천을 실행해 주세요.";
+    return;
+  }
+
+  if (
+    selectedRecommendationIndex === null ||
+    !recommendations.some((hotel) => hotel.index === selectedRecommendationIndex)
+  ) {
+    selectedRecommendationIndex = recommendations[0].index;
+  }
+
+  recommendationsContainer.innerHTML = recommendations
+    .map((hotel, position) => {
+      const reasons = hotel.reasons?.length
+        ? hotel.reasons.join(" | ")
+        : "추천 이유 없음";
+
+      const isSelected = hotel.index === selectedRecommendationIndex;
+
+      return `
+        <div class="recommendation-card ${isSelected ? "selected" : ""}">
+          <div class="recommendation-rank">TOP ${position + 1}</div>
+          <div class="recommendation-name">${escapeHtml(hotel.name || "Unknown hotel")}</div>
+          <div class="recommendation-meta">
+            Score ${escapeHtml(hotel.rankingScore)} · Review ${escapeHtml(hotel.scoreText || "-")}
+          </div>
+          <div class="recommendation-meta">${escapeHtml(hotel.price || "가격 정보 없음")}</div>
+          <div class="recommendation-reasons">${escapeHtml(reasons)}</div>
+          <button data-hotel-index="${hotel.index}">
+            ${isSelected ? "Selected" : "Select This Hotel"}
+          </button>
+        </div>
+      `;
+    })
+    .join("");
+
+  recommendationHelper.textContent =
+    "후보를 선택한 뒤 Confirm Selected Hotel을 누르면 해당 호텔 페이지로 이동합니다.";
+
+  recommendationsContainer
+    .querySelectorAll("button[data-hotel-index]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        selectedRecommendationIndex = Number(button.dataset.hotelIndex);
+        renderRecommendations(latestRecommendations);
+      });
+    });
 }
 
 function getPayloadFromTextarea() {
@@ -120,7 +193,7 @@ document
 
 document
   .getElementById("runFlowButton")
-  ?.addEventListener("click", () => {
+  ?.addEventListener("click", async () => {
     const request =
       getPayloadFromTextarea();
 
@@ -141,49 +214,67 @@ document
       return;
     }
 
-    sendToContent({
+    await sendToContent({
       type: "RUN_BOOKING_FLOW",
       payload: request.payload
     });
   });
 
-  document
-  .getElementById("extractHotelsButton")
-  ?.addEventListener("click", () => {
-    sendToContent({
-      type: "EXTRACT_HOTELS"
-    });
-  });
-
-  document
-  .getElementById("clickHotelButton")
-  ?.addEventListener("click", () => {
-    sendToContent({
-      type: "CLICK_FIRST_HOTEL"
-    });
-  });
-
 document
-  .getElementById("clickBestMatchedHotelButton")
-  ?.addEventListener("click", () => {
+  .getElementById("recommendTopHotelsButton")
+  ?.addEventListener("click", async () => {
     const request = getPayloadFromTextarea();
 
     if (!request) {
       return;
     }
 
-    sendToContent({
+    const response = await sendToContent({
+      type: "GET_TOP_HOTEL_RECOMMENDATIONS",
+      payload: {
+        hotelPreference: request.payload.hotelPreference || [],
+        limit: 3
+      }
+    });
+
+    renderRecommendations(response?.recommendations || []);
+  });
+
+document
+  .getElementById("clickBestMatchedHotelButton")
+  ?.addEventListener("click", async () => {
+    const request = getPayloadFromTextarea();
+
+    if (!request) {
+      return;
+    }
+
+    const response = await sendToContent({
       type: "CLICK_BEST_MATCHED_HOTEL",
       payload: {
         hotelPreference: request.payload.hotelPreference || []
       }
     });
+
+    if (response?.hotelIndex !== undefined) {
+      selectedRecommendationIndex = response.hotelIndex;
+    }
   });
 
   document
   .getElementById("confirmHotelSelectionButton")
-  ?.addEventListener("click", () => {
-    sendToContent({
+  ?.addEventListener("click", async () => {
+    if (selectedRecommendationIndex !== null) {
+      await sendToContent({
+        type: "CONFIRM_SPECIFIC_HOTEL_SELECTION",
+        payload: {
+          hotelIndex: selectedRecommendationIndex
+        }
+      });
+      return;
+    }
+
+    await sendToContent({
       type: "CONFIRM_HOTEL_SELECTION"
     });
   });

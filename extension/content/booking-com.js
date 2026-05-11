@@ -1,5 +1,178 @@
+let recommendedHotelIndex = null;
+let recommendedHotels = [];
+let automationSessionId = 0;
+let automationLogs = [];
+
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function startAutomationSession(label) {
+  automationSessionId += 1;
+  automationLogs = [];
+  logAutomation("session.start", { sessionId: automationSessionId, label });
+}
+
+function logAutomation(step, details = {}) {
+  const entry = {
+    sessionId: automationSessionId,
+    timestamp: new Date().toISOString(),
+    step,
+    details
+  };
+
+  automationLogs.push(entry);
+  console.log("[Travel Agent]", step, details);
+  return entry;
+}
+
+function getAutomationLogs() {
+  return automationLogs.slice(-200);
+}
+
+function buildErrorResult(error, details = {}) {
+  logAutomation("step.error", { error, ...details });
+  return {
+    ok: false,
+    error,
+    logs: getAutomationLogs()
+  };
+}
+
+function buildSuccessResult(data = {}) {
+  return {
+    ok: true,
+    ...data,
+    logs: getAutomationLogs()
+  };
+}
+
+function isElementVisible(element) {
+  if (!element) {
+    return false;
+  }
+
+  const rect = element.getBoundingClientRect();
+  const style = window.getComputedStyle(element);
+
+  return (
+    rect.width > 0 &&
+    rect.height > 0 &&
+    style.visibility !== "hidden" &&
+    style.display !== "none"
+  );
+}
+
+function describeElement(element) {
+  if (!element) {
+    return null;
+  }
+
+  return {
+    tag: element.tagName,
+    id: element.id || null,
+    className: element.className || null,
+    text: element.textContent?.trim()?.slice(0, 80) || null,
+    ariaLabel: element.getAttribute("aria-label")
+  };
+}
+
+function findFirstMatchingElement(selectors, options = {}) {
+  const { root = document, visibleOnly = false } = options;
+
+  for (const selector of selectors) {
+    const element = root.querySelector(selector);
+
+    if (!element) {
+      continue;
+    }
+
+    if (visibleOnly && !isElementVisible(element)) {
+      continue;
+    }
+
+    logAutomation("selector.match", {
+      selector,
+      element: describeElement(element)
+    });
+
+    return {
+      element,
+      selector
+    };
+  }
+
+  logAutomation("selector.miss", { selectors });
+  return null;
+}
+
+async function waitForCondition(check, options = {}) {
+  const {
+    timeoutMs = 5000,
+    intervalMs = 250,
+    label = "condition"
+  } = options;
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const result = check();
+
+    if (result) {
+      logAutomation("wait.success", {
+        label,
+        elapsedMs: Date.now() - startedAt
+      });
+      return result;
+    }
+
+    await wait(intervalMs);
+  }
+
+  logAutomation("wait.timeout", { label, timeoutMs });
+  return null;
+}
+
+async function safeClick(element, label) {
+  if (!element) {
+    return false;
+  }
+
+  element.scrollIntoView({
+    behavior: "auto",
+    block: "center",
+    inline: "center"
+  });
+
+  await wait(100);
+
+  try {
+    element.click();
+    logAutomation("click.native", {
+      label,
+      element: describeElement(element)
+    });
+    return true;
+  } catch (error) {
+    logAutomation("click.native_failed", {
+      label,
+      error: error.message
+    });
+  }
+
+  try {
+    simulateClick(element);
+    logAutomation("click.simulated", {
+      label,
+      element: describeElement(element)
+    });
+    return true;
+  } catch (error) {
+    logAutomation("click.simulated_failed", {
+      label,
+      error: error.message
+    });
+    return false;
+  }
 }
 
 function setNativeValue(element, value) {
@@ -33,47 +206,78 @@ function simulateClick(element) {
 }
 
 async function fillDestination(destination) {
-  const input =
-    document.querySelector('input[name="ss"]') ||
-    document.querySelector('[data-testid="destination-container"] input');
+  logAutomation("destination.start", { destination });
+
+  const inputMatch = findFirstMatchingElement(
+    [
+      'input[name="ss"]',
+      '[data-testid="destination-container"] input',
+      '[data-testid="destination-container"] input[type="search"]'
+    ],
+    { visibleOnly: true }
+  );
+  const input = inputMatch?.element;
 
   if (!input) {
-    return { ok: false, error: "Destination input not found" };
+    return buildErrorResult("Destination input not found");
   }
 
   input.focus();
   setNativeValue(input, destination);
 
-  await wait(1000);
-
-  const firstSuggestion =
-    document.querySelector('[data-testid="autocomplete-result"]') ||
-    document.querySelector('[data-testid="destination-container"] [role="option"]') ||
-    document.querySelector('li[id^="autocomplete"] [role="option"]') ||
-    document.querySelector('[data-testid="internal-input-container"] ~ ul li:first-child');
+  const firstSuggestion = await waitForCondition(
+    () =>
+      findFirstMatchingElement(
+        [
+          '[data-testid="autocomplete-result"]',
+          '[data-testid="destination-container"] [role="option"]',
+          'li[id^="autocomplete"] [role="option"]',
+          '[data-testid="internal-input-container"] ~ ul li:first-child'
+        ],
+        { visibleOnly: true }
+      )?.element,
+    { timeoutMs: 2500, intervalMs: 200, label: "destination_suggestion" }
+  );
 
   if (firstSuggestion) {
-    firstSuggestion.click();
+    await safeClick(firstSuggestion, "destination_suggestion");
     await wait(500);
   }
 
-  return { ok: true, field: "destination", value: destination };
+  return buildSuccessResult({
+    field: "destination",
+    value: destination
+  });
 }
 
 async function openDatePicker() {
-  const dateButton =
-    document.querySelector('[data-testid="searchbox-dates-container"]') ||
-    document.querySelector('[data-testid="date-display-field-start"]') ||
-    document.querySelector('[data-testid="date-display-field-end"]');
+  logAutomation("dates.open.start");
+
+  const dateButton = findFirstMatchingElement(
+    [
+      '[data-testid="searchbox-dates-container"]',
+      '[data-testid="date-display-field-start"]',
+      '[data-testid="date-display-field-end"]'
+    ],
+    { visibleOnly: true }
+  )?.element;
 
   if (!dateButton) {
-    return { ok: false, error: "Date picker button not found" };
+    return buildErrorResult("Date picker button not found");
   }
 
-  dateButton.click();
-  await wait(700);
+  await safeClick(dateButton, "date_picker_button");
 
-  return { ok: true };
+  const dateGrid = await waitForCondition(
+    () => getCalendarDateButtons().length > 0,
+    { timeoutMs: 2500, intervalMs: 200, label: "calendar_open" }
+  );
+
+  if (!dateGrid) {
+    return buildErrorResult("Calendar did not open");
+  }
+
+  return buildSuccessResult();
 }
 
 function getCalendarDateButtons() {
@@ -121,7 +325,7 @@ function extractHotelCards() {
     document.querySelectorAll('[data-testid="property-card"]')
   );
 
-  return cards.map((card, index) => {
+  const hotels = cards.map((card, index) => {
     const name = card
       .querySelector('[data-testid="title"]')
       ?.textContent?.trim();
@@ -144,25 +348,27 @@ function extractHotelCards() {
       description
     };
   });
+
+  logAutomation("hotels.extracted", {
+    count: hotels.length
+  });
+
+  return hotels;
 }
 
-function clickFirstHotelCard() {
+async function clickFirstHotelCard() {
+  startAutomationSession("click_first_hotel");
   const firstCard = document.querySelector(
     '[data-testid="property-card"] a'
   );
 
   if (!firstCard) {
-    return {
-      ok: false,
-      error: "No hotel card found"
-    };
+    return buildErrorResult("No hotel card found");
   }
 
-  firstCard.click();
+  await safeClick(firstCard, "first_hotel_card");
 
-  return {
-    ok: true
-  };
+  return buildSuccessResult();
 }
 
 function parseHotelScore(scoreText) {
@@ -230,100 +436,176 @@ function calculateHotelRankingScore(hotel, preferences = []) {
   };
 }
 
-function clickBestMatchedHotel(preferences = []) {
+function rankHotels(preferences = [], limit = 3) {
   const cards = Array.from(
     document.querySelectorAll('[data-testid="property-card"]')
   );
 
   if (!cards.length) {
-    return {
-      ok: false,
-      error: "No hotel cards found"
-    };
+    return [];
   }
 
-  let bestCard = null;
-  let bestHotel = null;
-  let bestRankingScore = -1;
-  let bestReasons = [];
-  let recommendedHotelCard = null;
+  const rankedHotels = cards
+    .map((card, index) => {
+      const hotel = {
+        index,
+        name: card.querySelector('[data-testid="title"]')?.textContent?.trim(),
+        price: card
+          .querySelector('[data-testid="price-and-discounted-price"]')
+          ?.textContent?.trim(),
+        scoreText: card
+          .querySelector('[data-testid="review-score"]')
+          ?.textContent?.trim(),
+        description: card.textContent.trim()
+      };
 
-  cards.forEach((card, index) => {
-    const hotel = {
-      index,
-      name: card.querySelector('[data-testid="title"]')?.textContent?.trim(),
-      price: card
-        .querySelector('[data-testid="price-and-discounted-price"]')
-        ?.textContent?.trim(),
-      scoreText: card
-        .querySelector('[data-testid="review-score"]')
-        ?.textContent?.trim(),
-      description: card.textContent.trim()
-    };
+      const rankingResult = calculateHotelRankingScore(
+        hotel,
+        preferences
+      );
 
-    const rankingResult = calculateHotelRankingScore(
-      hotel,
-      preferences
-    );
+      return {
+        ...hotel,
+        rankingScore: rankingResult.score,
+        reasons: rankingResult.reasons
+      };
+    })
+    .sort((a, b) => b.rankingScore - a.rankingScore)
+    .slice(0, limit);
 
-    if (rankingResult.score > bestRankingScore) {
-      bestRankingScore = rankingResult.score;
-      bestCard = card;
-      bestHotel = hotel;
-      bestReasons = rankingResult.reasons;
-    }
+  recommendedHotels = rankedHotels;
+
+  if (rankedHotels[0]) {
+    recommendedHotelIndex = rankedHotels[0].index;
+  }
+
+  logAutomation("recommendation.ranked", {
+    limit,
+    count: rankedHotels.length,
+    hotels: rankedHotels.map((hotel) => ({
+      index: hotel.index,
+      name: hotel.name,
+      rankingScore: hotel.rankingScore,
+      reasons: hotel.reasons
+    }))
   });
 
-  if (!bestCard) {
-    return {
-      ok: false,
-      error: "No matched hotel found"
-    };
-  }
-
-  const hotelLink = bestCard.querySelector("a");
-
-  if (!hotelLink) {
-    return {
-      ok: false,
-      error: "No hotel link found"
-    };
-  }
-
-  recommendedHotelCard = bestCard;
-
-  return {
-    ok: true,
-    selectedHotel: bestHotel.name,
-    rankingScore: bestRankingScore,
-    preferences,
-    reasons: bestReasons,
-    hotelIndex: bestHotel.index
-  };
+  return rankedHotels;
 }
 
-function confirmRecommendedHotelSelection() {
-  if (!recommendedHotelCard) {
-    return {
-      ok: false,
-      error: "No recommended hotel stored"
-    };
+async function confirmRecommendedHotelSelection() {
+  startAutomationSession("confirm_recommended_hotel");
+  logAutomation("recommendation.confirm.start", {
+    recommendedHotelIndex
+  });
+
+  if (recommendedHotelIndex === null) {
+    return buildErrorResult("No recommended hotel index stored");
   }
 
-  const hotelLink = recommendedHotelCard.querySelector("a");
+  const cards = Array.from(
+    document.querySelectorAll('[data-testid="property-card"]')
+  );
+
+  const card = cards[recommendedHotelIndex];
+
+  if (!card) {
+    return buildErrorResult("Recommended hotel card not found", {
+      recommendedHotelIndex,
+      availableCards: cards.length
+    });
+  }
+
+  const hotelLink = card.querySelector("a");
 
   if (!hotelLink) {
-    return {
-      ok: false,
-      error: "No hotel link found"
-    };
+    return buildErrorResult("No hotel link found");
   }
 
-  hotelLink.click();
+  await safeClick(hotelLink, "recommended_hotel_link");
 
-  return {
-    ok: true
-  };
+  return buildSuccessResult({
+    message: "Hotel selection triggered"
+  });
+}
+
+async function confirmSpecificHotelSelection(hotelIndex) {
+  startAutomationSession("confirm_specific_hotel");
+  logAutomation("recommendation.confirm_specific.start", {
+    hotelIndex
+  });
+
+  const cards = Array.from(
+    document.querySelectorAll('[data-testid="property-card"]')
+  );
+
+  const card = cards[hotelIndex];
+
+  if (!card) {
+    return buildErrorResult("Selected hotel card not found", {
+      hotelIndex,
+      availableCards: cards.length
+    });
+  }
+
+  const hotelLink = card.querySelector("a");
+
+  if (!hotelLink) {
+    return buildErrorResult("No hotel link found");
+  }
+
+  recommendedHotelIndex = hotelIndex;
+  await safeClick(hotelLink, "selected_hotel_link");
+
+  return buildSuccessResult({
+    hotelIndex,
+    message: "Selected hotel navigation triggered"
+  });
+}
+
+function getTopHotelRecommendations(preferences = [], limit = 3) {
+  startAutomationSession("recommend_top_hotels");
+  logAutomation("recommendation.top.start", {
+    preferences,
+    limit
+  });
+
+  const recommendations = rankHotels(preferences, limit);
+
+  if (!recommendations.length) {
+    return buildErrorResult("No hotel cards found");
+  }
+
+  return buildSuccessResult({
+    recommendations,
+    recommendedHotelIndex
+  });
+}
+
+function clickBestMatchedHotel(preferences = []) {
+  startAutomationSession("recommend_best_hotel");
+  logAutomation("recommendation.start", { preferences });
+  const rankedHotels = rankHotels(preferences, 1);
+
+  if (!rankedHotels.length) {
+    return buildErrorResult("No hotel cards found");
+  }
+  const bestHotel = rankedHotels[0];
+
+  logAutomation("recommendation.selected", {
+    recommendedHotelIndex,
+    selectedHotel: bestHotel.name,
+    rankingScore: bestHotel.rankingScore,
+    reasons: bestHotel.reasons
+  });
+
+  return buildSuccessResult({
+    selectedHotel: bestHotel.name,
+    rankingScore: bestHotel.rankingScore,
+    preferences,
+    reasons: bestHotel.reasons,
+    hotelIndex: bestHotel.index
+  });
 }
 
 async function findDateButtonWithNavigation(date, maxClicks = 12) {
@@ -331,6 +613,7 @@ async function findDateButtonWithNavigation(date, maxClicks = 12) {
     const dateButton = findDateButton(date);
 
     if (dateButton) {
+      logAutomation("dates.found", { date, navigationClicks: i });
       return dateButton;
     }
 
@@ -343,7 +626,7 @@ async function findDateButtonWithNavigation(date, maxClicks = 12) {
     if (date < range.first) {
       const prevButton = getPrevMonthButton();
       if (!prevButton) return null;
-      prevButton.click();
+      await safeClick(prevButton, "calendar_previous_month");
       await wait(500);
       continue;
     }
@@ -351,7 +634,7 @@ async function findDateButtonWithNavigation(date, maxClicks = 12) {
     if (date > range.last) {
       const nextButton = getNextMonthButton();
       if (!nextButton) return null;
-      nextButton.click();
+      await safeClick(nextButton, "calendar_next_month");
       await wait(500);
       continue;
     }
@@ -363,6 +646,7 @@ async function findDateButtonWithNavigation(date, maxClicks = 12) {
 }
 
 async function selectBookingDates(checkIn, checkOut) {
+  logAutomation("dates.start", { checkIn, checkOut });
   const opened = await openDatePicker();
 
   if (!opened.ok) {
@@ -372,41 +656,63 @@ async function selectBookingDates(checkIn, checkOut) {
   const checkInButton = await findDateButtonWithNavigation(checkIn);
 
   if (!checkInButton) {
-    return { ok: false, error: `Check-in date not found after navigation: ${checkIn}` };
+    return buildErrorResult(`Check-in date not found after navigation: ${checkIn}`);
   }
 
-  checkInButton.click();
+  await safeClick(checkInButton, "checkin_date");
   await wait(500);
 
   const checkOutButton = await findDateButtonWithNavigation(checkOut);
 
   if (!checkOutButton) {
-    return { ok: false, error: `Check-out date not found after navigation: ${checkOut}` };
+    return buildErrorResult(`Check-out date not found after navigation: ${checkOut}`);
   }
 
-  checkOutButton.click();
+  await safeClick(checkOutButton, "checkout_date");
   await wait(500);
 
-  return { ok: true, field: "dates", checkIn, checkOut };
+  return buildSuccessResult({
+    field: "dates",
+    checkIn,
+    checkOut
+  });
 }
 
 async function openGuestSelector() {
-  const guestButton =
-    document.querySelector('[data-testid="occupancy-config"]') ||
-    document.querySelector('[data-testid="searchbox-occupancy"]');
+  logAutomation("guests.open.start");
+
+  const guestButton = findFirstMatchingElement(
+    [
+      '[data-testid="occupancy-config"]',
+      '[data-testid="searchbox-occupancy"]'
+    ],
+    { visibleOnly: true }
+  )?.element;
 
   if (!guestButton) {
-    return { ok: false, error: "Guest selector button not found" };
+    return buildErrorResult("Guest selector button not found");
   }
 
-  guestButton.click();
-  await wait(500);
+  await safeClick(guestButton, "guest_selector_button");
 
-  return { ok: true };
+  const popupOpened = await waitForCondition(
+    () => document.querySelector('[data-testid="occupancy-popup"]'),
+    { timeoutMs: 2500, intervalMs: 200, label: "occupancy_popup_open" }
+  );
+
+  if (!popupOpened) {
+    return buildErrorResult("Occupancy popup did not open");
+  }
+
+  return buildSuccessResult();
+}
+
+function getOccupancyPopup() {
+  return document.querySelector('[data-testid="occupancy-popup"]');
 }
 
 function getOccupancyIconButtons() {
-  const popup = document.querySelector('[data-testid="occupancy-popup"]');
+  const popup = getOccupancyPopup();
 
   if (!popup) return null;
 
@@ -416,27 +722,259 @@ function getOccupancyIconButtons() {
   );
 }
 
-function getAdultCountElement() {
-  const popup = document.querySelector('[data-testid="occupancy-popup"]');
+function findOccupancyRow(keywords = []) {
+  const popup = getOccupancyPopup();
 
   if (!popup) return null;
 
-  return Array.from(popup.querySelectorAll("span")).find((el) =>
+  const candidates = Array.from(popup.querySelectorAll("div, li")).filter((el) => {
+    if (!isElementVisible(el)) {
+      return false;
+    }
+
+    const text = el.textContent?.trim();
+    if (!text) {
+      return false;
+    }
+
+    const buttonCount = el.querySelectorAll("button").length;
+    const numericCount = Array.from(el.querySelectorAll("span, div")).filter((child) =>
+      /^\d+$/.test(child.textContent.trim())
+    ).length;
+
+    return (
+      keywords.some((keyword) => text.includes(keyword)) &&
+      buttonCount >= 2 &&
+      numericCount >= 1 &&
+      text.length < 80
+    );
+  });
+
+  const row =
+    candidates
+      .sort((a, b) => a.textContent.trim().length - b.textContent.trim().length)[0] ||
+    null;
+
+  logAutomation("occupancy.row_lookup", {
+    keywords,
+    matched: !!row,
+    text: row?.textContent?.trim()?.slice(0, 120) || null
+  });
+
+  return row;
+}
+
+function getAdultRow() {
+  return findOccupancyRow(["성인", "Adults", "Adult"]);
+}
+
+function getAdultCountElement() {
+  const adultRow = getAdultRow();
+
+  if (adultRow) {
+    const countElement = Array.from(adultRow.querySelectorAll("span, div")).find((el) =>
+      /^\d+$/.test(el.textContent.trim())
+    );
+
+    if (countElement) {
+      return countElement;
+    }
+  }
+
+  const popup = getOccupancyPopup();
+  if (!popup) return null;
+
+  return Array.from(popup.querySelectorAll("span, div")).find((el) =>
     /^\d+$/.test(el.textContent.trim())
   );
 }
 
+function getButtonsFromRow(row) {
+  if (!row) {
+    return [];
+  }
+
+  return Array.from(row.querySelectorAll("button")).filter(isElementVisible);
+}
+
+function getAdultButtonCandidates(direction) {
+  const adultRow = getAdultRow();
+  const rowButtons = getButtonsFromRow(adultRow);
+  const countElement = getAdultCountElement();
+
+  const labelledButton = pickButtonByAria(
+    rowButtons,
+    direction === "up"
+      ? ["성인 수 늘리기", "Increase number of Adults", "Increase number of Adult", "성인 증가"]
+      : ["성인 수 줄이기", "Decrease number of Adults", "Decrease number of Adult", "성인 감소"]
+  );
+
+  if (labelledButton) {
+    return [labelledButton];
+  }
+
+  if (countElement) {
+    const orderedButtons = rowButtons
+      .map((button) => ({
+        button,
+        deltaX:
+          button.getBoundingClientRect().left -
+          countElement.getBoundingClientRect().left
+      }))
+      .sort((a, b) => a.deltaX - b.deltaX)
+      .map((item) => item.button);
+
+    const directionalButtons =
+      direction === "up"
+        ? orderedButtons.filter(
+            (button) =>
+              button.getBoundingClientRect().left >
+              countElement.getBoundingClientRect().left
+          )
+        : orderedButtons.filter(
+            (button) =>
+              button.getBoundingClientRect().left <
+              countElement.getBoundingClientRect().left
+          );
+
+    if (directionalButtons.length) {
+      return directionalButtons;
+    }
+  }
+
+  return direction === "up" ? rowButtons.slice().reverse() : rowButtons;
+}
+
+function getRightmostButton(row) {
+  const buttons = getButtonsFromRow(row);
+
+  return (
+    buttons
+      .slice()
+      .sort(
+        (a, b) =>
+          b.getBoundingClientRect().left - a.getBoundingClientRect().left
+      )[0] || null
+  );
+}
+
+function getLeftmostButton(row) {
+  const buttons = getButtonsFromRow(row);
+
+  return (
+    buttons
+      .slice()
+      .sort(
+        (a, b) =>
+          a.getBoundingClientRect().left - b.getBoundingClientRect().left
+      )[0] || null
+  );
+}
+
+function pickButtonByAria(buttons, keywords) {
+  return buttons.find((button) => {
+    const ariaLabel = button.getAttribute("aria-label") || "";
+    return keywords.some((keyword) => ariaLabel.includes(keyword));
+  }) || null;
+}
+
 function getAdultMinusButton() {
-  const buttons = getOccupancyIconButtons();
-  return buttons?.[0] || null;
+  const adultRow = getAdultRow();
+  return getLeftmostButton(adultRow) || getAdultButtonCandidates("down")[0] || null;
 }
 
 function getAdultPlusButton() {
-  const buttons = getOccupancyIconButtons();
-  return buttons?.[1] || null;
+  const adultRow = getAdultRow();
+  return getRightmostButton(adultRow) || getAdultButtonCandidates("up")[0] || null;
+}
+
+async function adjustAdultCountOnce(direction, current) {
+  const primaryButton =
+    direction === "up" ? getAdultPlusButton() : getAdultMinusButton();
+  const fallbackCandidates = getAdultButtonCandidates(direction);
+  const buttonCandidates = [
+    ...(primaryButton ? [primaryButton] : []),
+    ...fallbackCandidates.filter((button) => button !== primaryButton)
+  ];
+
+  logAutomation("guests.button_candidates", {
+    direction,
+    count: buttonCandidates.length,
+    candidates: buttonCandidates.map(describeElement)
+  });
+
+  for (const [index, button] of buttonCandidates.entries()) {
+    await safeClick(button, direction === "up" ? "adult_plus" : "adult_minus");
+    await wait(250);
+
+    let nextElement = getAdultCountElement();
+    let next = parseInt(nextElement?.textContent.trim(), 10);
+
+    if (next === current) {
+      simulateClick(button);
+      logAutomation("click.simulated_forced", {
+        direction,
+        candidateIndex: index,
+        button: describeElement(button)
+      });
+      await wait(300);
+      nextElement = getAdultCountElement();
+      next = parseInt(nextElement?.textContent.trim(), 10);
+    }
+
+    if (next === current) {
+      const rect = button.getBoundingClientRect();
+      const targetX =
+        direction === "up" ? rect.right - rect.width / 3 : rect.left + rect.width / 3;
+      const targetY = rect.top + rect.height / 2;
+      const coordinateProps = {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        clientX: targetX,
+        clientY: targetY
+      };
+
+      button.dispatchEvent(new PointerEvent("pointerdown", coordinateProps));
+      button.dispatchEvent(new MouseEvent("mousedown", coordinateProps));
+      button.dispatchEvent(new PointerEvent("pointerup", coordinateProps));
+      button.dispatchEvent(new MouseEvent("mouseup", coordinateProps));
+      button.dispatchEvent(new MouseEvent("click", coordinateProps));
+
+      logAutomation("click.coordinate_forced", {
+        direction,
+        candidateIndex: index,
+        button: describeElement(button),
+        x: targetX,
+        y: targetY
+      });
+
+      await wait(300);
+      nextElement = getAdultCountElement();
+      next = parseInt(nextElement?.textContent.trim(), 10);
+    }
+
+    logAutomation(
+      direction === "up" ? "guests.count_after_plus" : "guests.count_after_minus",
+      {
+        current,
+        next,
+        candidateIndex: index,
+        countElement: describeElement(nextElement),
+        button: describeElement(button)
+      }
+    );
+
+    if (!isNaN(next) && next !== current) {
+      return next;
+    }
+  }
+
+  return current;
 }
 
 async function setAdultCount(targetAdults) {
+  logAutomation("guests.set_adults.start", { targetAdults });
   const opened = await openGuestSelector();
 
   if (!opened.ok) return opened;
@@ -446,63 +984,68 @@ async function setAdultCount(targetAdults) {
   const countElement = getAdultCountElement();
 
   if (!countElement) {
-    return { ok: false, error: "Adult count element not found" };
+    return buildErrorResult("Adult count element not found");
   }
 
   let current = parseInt(countElement.textContent.trim(), 10);
 
+  logAutomation("guests.current_count", {
+    current,
+    countElement: describeElement(countElement)
+  });
+
   if (isNaN(current)) {
-    return { ok: false, error: "Failed to read adult count" };
+    return buildErrorResult("Failed to read adult count");
   }
 
   const MAX_CLICKS = 10;
 
   for (let i = 0; current < targetAdults && i < MAX_CLICKS; i++) {
-    const plusButton = getAdultPlusButton();
-
-    if (!plusButton) {
-      return { ok: false, error: "Plus button not found" };
+    if (!getAdultPlusButton()) {
+      return buildErrorResult("Plus button not found");
     }
 
-    simulateClick(plusButton);
-    await wait(400);
-
-    const next = parseInt(getAdultCountElement()?.textContent.trim(), 10);
+    const next = await adjustAdultCountOnce("up", current);
 
     if (isNaN(next) || next === current) {
-      return { ok: false, error: `Adult count stuck at ${current}` };
+      return buildErrorResult(`Adult count stuck at ${current}`, {
+        targetAdults,
+        direction: "up"
+      });
     }
 
     current = next;
   }
 
   for (let i = 0; current > targetAdults && i < MAX_CLICKS; i++) {
-    const minusButton = getAdultMinusButton();
-
-    if (!minusButton) {
-      return { ok: false, error: "Minus button not found" };
+    if (!getAdultMinusButton()) {
+      return buildErrorResult("Minus button not found");
     }
 
-    simulateClick(minusButton);
-    await wait(400);
-
-    const next = parseInt(getAdultCountElement()?.textContent.trim(), 10);
+    const next = await adjustAdultCountOnce("down", current);
 
     if (isNaN(next) || next === current) {
-      return { ok: false, error: `Adult count stuck at ${current}` };
+      return buildErrorResult(`Adult count stuck at ${current}`, {
+        targetAdults,
+        direction: "down"
+      });
     }
 
     current = next;
   }
 
-  return { ok: true, field: "adults", value: targetAdults };
+  return buildSuccessResult({
+    field: "adults",
+    value: targetAdults
+  });
 }
 
 async function clickGuestDoneButton() {
+  logAutomation("guests.done.start");
   const popup = document.querySelector('[data-testid="occupancy-popup"]');
 
   if (!popup) {
-    return { ok: false, error: "Occupancy popup not found" };
+    return buildErrorResult("Occupancy popup not found");
   }
 
   const doneButton =
@@ -513,32 +1056,62 @@ async function clickGuestDoneButton() {
     });
 
   if (!doneButton) {
-    return { ok: false, error: "Guest done button not found" };
+    return buildErrorResult("Guest done button not found");
   }
 
-  doneButton.click();
-  await wait(300);
+  await safeClick(doneButton, "guest_done_button");
 
-  return { ok: true };
+  const popupClosed = await waitForCondition(
+    () => !document.querySelector('[data-testid="occupancy-popup"]'),
+    { timeoutMs: 2500, intervalMs: 200, label: "occupancy_popup_closed" }
+  );
+
+  if (!popupClosed) {
+    return buildErrorResult("Occupancy popup did not close after Done");
+  }
+
+  return buildSuccessResult();
 }
 
 async function clickSearchButton() {
-  const searchButton =
-    document.querySelector('[data-testid="search-button"]') ||
-    document.querySelector('button[type="submit"]');
+  logAutomation("search.start");
+
+  const searchButton = findFirstMatchingElement(
+    [
+      '[data-testid="search-button"]',
+      'button[type="submit"]'
+    ],
+    { visibleOnly: true }
+  )?.element;
 
   if (!searchButton) {
-    return { ok: false, error: "Search button not found" };
+    return buildErrorResult("Search button not found");
   }
 
-  searchButton.click();
+  await safeClick(searchButton, "search_button");
 
-  return { ok: true };
+  const navigationDetected = await waitForCondition(
+    () =>
+      window.location.href.includes("/searchresults") ||
+      document.querySelector('[data-testid="property-card"]') ||
+      document.querySelector('[data-testid="property-card-container"]'),
+    { timeoutMs: 10000, intervalMs: 400, label: "search_results_navigation" }
+  );
+
+  if (!navigationDetected) {
+    return buildErrorResult("Search results page did not load");
+  }
+
+  return buildSuccessResult({
+    navigated: true,
+    url: window.location.href
+  });
 }
 
 async function runBookingFlow(data) {
   try {
-    console.log("[Travel Agent] Run booking flow:", data);
+    startAutomationSession("run_booking_flow");
+    logAutomation("flow.start", { payload: data });
 
     const destinationResult = await fillDestination(data.destination);
     if (!destinationResult.ok) return destinationResult;
@@ -560,10 +1133,19 @@ async function runBookingFlow(data) {
 
     await wait(500);
 
-    return await clickSearchButton();
+    const searchResult = await clickSearchButton();
+    if (!searchResult.ok) {
+      return searchResult;
+    }
+
+    logAutomation("flow.success", { finalUrl: window.location.href });
+    return buildSuccessResult({
+      message: "Booking flow completed",
+      finalUrl: window.location.href
+    });
 
   } catch (error) {
     console.error("[Travel Agent] Flow failed:", error);
-    return { ok: false, error: error.message };
+    return buildErrorResult(error.message);
   }
 }

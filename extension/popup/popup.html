@@ -6,13 +6,16 @@
 
     <style>
       body {
-        width: 260px;
-        padding: 12px;
-        font-family: Arial, sans-serif;
+        width: 360px;
+        padding: 14px;
+        font-family: "Segoe UI", Arial, sans-serif;
+        background: linear-gradient(180deg, #f5f7fb 0%, #eef2f7 100%);
+        color: #152033;
       }
 
       h3 {
         margin-top: 0;
+        margin-bottom: 12px;
       }
 
       .field {
@@ -34,8 +37,13 @@
       button {
         width: 100%;
         padding: 10px;
-        margin-top: 12px;
+        margin-top: 10px;
         cursor: pointer;
+        border: 0;
+        border-radius: 10px;
+        background: #0f5cc0;
+        color: white;
+        font-weight: 600;
       }
 
       pre {
@@ -49,6 +57,83 @@
         padding: 6px;
         box-sizing: border-box;
         font-size: 12px;
+        border-radius: 8px;
+        border: 1px solid #cbd5e1;
+        background: white;
+      }
+
+      .panel {
+        margin-top: 12px;
+        padding: 12px;
+        border-radius: 14px;
+        background: white;
+        border: 1px solid #d9e2ef;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+      }
+
+      .panel-title {
+        margin: 0 0 8px;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .recommendations {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .recommendation-card {
+        border: 1px solid #d9e2ef;
+        border-radius: 12px;
+        padding: 10px;
+        background: #f8fbff;
+      }
+
+      .recommendation-card.selected {
+        border-color: #0f5cc0;
+        background: #eef5ff;
+      }
+
+      .recommendation-rank {
+        font-size: 11px;
+        font-weight: 700;
+        color: #0f5cc0;
+      }
+
+      .recommendation-name {
+        margin: 4px 0 6px;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .recommendation-meta {
+        font-size: 12px;
+        color: #475569;
+        margin-bottom: 6px;
+      }
+
+      .recommendation-reasons {
+        font-size: 12px;
+        color: #1e293b;
+        margin-bottom: 8px;
+      }
+
+      .recommendation-card button {
+        margin-top: 0;
+        background: #e2e8f0;
+        color: #0f172a;
+      }
+
+      .recommendation-card.selected button {
+        background: #0f5cc0;
+        color: white;
+      }
+
+      .helper {
+        margin-top: 8px;
+        font-size: 11px;
+        color: #64748b;
       }
     </style>
   </head>
@@ -84,15 +169,20 @@
 
     <button id="runFlowButton">Run Booking Flow</button>
 
-    <button id="extractHotelsButton">Extract Hotels</button>
+    <button id="recommendTopHotelsButton">Recommend Top 3 Hotels</button>
 
-    <button id="clickHotelButton">Click First Hotel</button>
+    <button id="clickBestMatchedHotelButton">Recommend Best Match</button>
 
-    <button id="clickBestMatchedHotelButton">Click Best Matched Hotel</button>
+    <button id="confirmHotelSelectionButton">Confirm Selected Hotel</button>
 
-    <button id="confirmHotelSelectionButton">
-      Confirm Hotel Selection
-    </button>
+    <div class="panel">
+      <p class="panel-title">Top Recommendations</p>
+      <div id="recommendations" class="recommendations"></div>
+      <div id="recommendationHelper" class="helper">
+        호텔 추천을 실행하면 이곳에 상위 후보와 추천 이유가 표시됩니다.
+      </div>
+    </div>
+
     <pre id="result"></pre>
 
     <script src="popup.js"></script>
