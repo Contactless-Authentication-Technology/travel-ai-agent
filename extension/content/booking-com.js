@@ -106,6 +106,35 @@ function findFirstMatchingElement(selectors, options = {}) {
   return null;
 }
 
+function findButtonLikeByText(textPatterns = [], options = {}) {
+  const { root = document, visibleOnly = true } = options;
+  const elements = Array.from(
+    root.querySelectorAll("button, a, span, div")
+  );
+
+  for (const element of elements) {
+    if (visibleOnly && !isElementVisible(element)) {
+      continue;
+    }
+
+    const text = element.textContent?.trim();
+    if (!text) {
+      continue;
+    }
+
+    if (textPatterns.some((pattern) => text.includes(pattern))) {
+      logAutomation("text.match", {
+        patterns: textPatterns,
+        element: describeElement(element)
+      });
+      return element;
+    }
+  }
+
+  logAutomation("text.miss", { patterns: textPatterns });
+  return null;
+}
+
 async function waitForCondition(check, options = {}) {
   const {
     timeoutMs = 5000,

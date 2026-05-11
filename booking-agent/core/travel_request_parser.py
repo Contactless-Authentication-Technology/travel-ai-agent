@@ -122,7 +122,7 @@ def parse_travel_request(text: str) -> dict:
         "high_review_score",
         [
             "높은 평점",
-            "평점 높은",
+            "평점이 높은",
             "리뷰 좋은",
             "후기 좋은",
             "review score",

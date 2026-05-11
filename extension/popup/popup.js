@@ -240,6 +240,14 @@ document
   });
 
 document
+  .getElementById("openDashboardButton")
+  ?.addEventListener("click", async () => {
+    await chrome.tabs.create({
+      url: "http://127.0.0.1:8000/"
+    });
+  });
+
+document
   .getElementById("runFlowButton")
   ?.addEventListener("click", async () => {
     const request =
@@ -309,7 +317,7 @@ document
     }
   });
 
-  document
+document
   .getElementById("confirmHotelSelectionButton")
   ?.addEventListener("click", async () => {
     if (selectedRecommendationIndex !== null) {
