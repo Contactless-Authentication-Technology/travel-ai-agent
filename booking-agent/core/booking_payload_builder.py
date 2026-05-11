@@ -13,10 +13,10 @@ def build_booking_com_payload(travel_request: dict) -> dict:
             "destination": travel_request["destination"],
             "checkIn": travel_request["departureDate"],
             "checkOut": travel_request["returnDate"],
-            "adults": travel_request["adults"]
+            "adults": travel_request["adults"],
+            "hotelPreference": travel_request.get("hotelPreference", [])
         }
     }
-
 
 def save_payload(payload: dict, output_path: str) -> None:
     path = Path(output_path)

@@ -146,3 +146,44 @@ document
       payload: request.payload
     });
   });
+
+  document
+  .getElementById("extractHotelsButton")
+  ?.addEventListener("click", () => {
+    sendToContent({
+      type: "EXTRACT_HOTELS"
+    });
+  });
+
+  document
+  .getElementById("clickHotelButton")
+  ?.addEventListener("click", () => {
+    sendToContent({
+      type: "CLICK_FIRST_HOTEL"
+    });
+  });
+
+document
+  .getElementById("clickBestMatchedHotelButton")
+  ?.addEventListener("click", () => {
+    const request = getPayloadFromTextarea();
+
+    if (!request) {
+      return;
+    }
+
+    sendToContent({
+      type: "CLICK_BEST_MATCHED_HOTEL",
+      payload: {
+        hotelPreference: request.payload.hotelPreference || []
+      }
+    });
+  });
+
+  document
+  .getElementById("confirmHotelSelectionButton")
+  ?.addEventListener("click", () => {
+    sendToContent({
+      type: "CONFIRM_HOTEL_SELECTION"
+    });
+  });

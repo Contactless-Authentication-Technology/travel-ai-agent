@@ -116,6 +116,216 @@ function findDateButton(date) {
   return document.querySelector(`[data-date="${date}"]`);
 }
 
+function extractHotelCards() {
+  const cards = Array.from(
+    document.querySelectorAll('[data-testid="property-card"]')
+  );
+
+  return cards.map((card, index) => {
+    const name = card
+      .querySelector('[data-testid="title"]')
+      ?.textContent?.trim();
+
+    const price = card
+      .querySelector('[data-testid="price-and-discounted-price"]')
+      ?.textContent?.trim();
+
+    const scoreText = card
+      .querySelector('[data-testid="review-score"]')
+      ?.textContent?.trim();
+
+    const description = card.textContent.trim();
+
+    return {
+      index,
+      name,
+      price,
+      scoreText,
+      description
+    };
+  });
+}
+
+function clickFirstHotelCard() {
+  const firstCard = document.querySelector(
+    '[data-testid="property-card"] a'
+  );
+
+  if (!firstCard) {
+    return {
+      ok: false,
+      error: "No hotel card found"
+    };
+  }
+
+  firstCard.click();
+
+  return {
+    ok: true
+  };
+}
+
+function parseHotelScore(scoreText) {
+  if (!scoreText) {
+    return 0;
+  }
+
+  const match = scoreText.replace(",", ".").match(/\d+(\.\d+)?/);
+
+  if (!match) {
+    return 0;
+  }
+
+  return Number(match[0]);
+}
+
+function calculateHotelRankingScore(hotel, preferences = []) {
+  let score = parseHotelScore(hotel.scoreText);
+  const reasons = [];
+
+  if (score > 0) {
+    reasons.push(`Review score: ${score}`);
+  }
+
+  const description = hotel.description || "";
+
+  if (
+    preferences.includes("breakfast_included") &&
+    (
+      description.includes("조식") ||
+      description.toLowerCase().includes("breakfast")
+    )
+  ) {
+    score += 1;
+    reasons.push("Matched preference: breakfast_included");
+  }
+
+  if (
+    preferences.includes("near_eiffel_tower") &&
+    (
+      description.includes("에펠") ||
+      description.toLowerCase().includes("eiffel")
+    )
+  ) {
+    score += 1;
+    reasons.push("Matched preference: near_eiffel_tower");
+  }
+
+  if (
+    preferences.includes("near_metro") &&
+    (
+      description.includes("지하철") ||
+      description.includes("역") ||
+      description.toLowerCase().includes("metro") ||
+      description.toLowerCase().includes("subway")
+    )
+  ) {
+    score += 1;
+    reasons.push("Matched preference: near_metro");
+  }
+
+  return {
+    score,
+    reasons
+  };
+}
+
+function clickBestMatchedHotel(preferences = []) {
+  const cards = Array.from(
+    document.querySelectorAll('[data-testid="property-card"]')
+  );
+
+  if (!cards.length) {
+    return {
+      ok: false,
+      error: "No hotel cards found"
+    };
+  }
+
+  let bestCard = null;
+  let bestHotel = null;
+  let bestRankingScore = -1;
+  let bestReasons = [];
+  let recommendedHotelCard = null;
+
+  cards.forEach((card, index) => {
+    const hotel = {
+      index,
+      name: card.querySelector('[data-testid="title"]')?.textContent?.trim(),
+      price: card
+        .querySelector('[data-testid="price-and-discounted-price"]')
+        ?.textContent?.trim(),
+      scoreText: card
+        .querySelector('[data-testid="review-score"]')
+        ?.textContent?.trim(),
+      description: card.textContent.trim()
+    };
+
+    const rankingResult = calculateHotelRankingScore(
+      hotel,
+      preferences
+    );
+
+    if (rankingResult.score > bestRankingScore) {
+      bestRankingScore = rankingResult.score;
+      bestCard = card;
+      bestHotel = hotel;
+      bestReasons = rankingResult.reasons;
+    }
+  });
+
+  if (!bestCard) {
+    return {
+      ok: false,
+      error: "No matched hotel found"
+    };
+  }
+
+  const hotelLink = bestCard.querySelector("a");
+
+  if (!hotelLink) {
+    return {
+      ok: false,
+      error: "No hotel link found"
+    };
+  }
+
+  recommendedHotelCard = bestCard;
+
+  return {
+    ok: true,
+    selectedHotel: bestHotel.name,
+    rankingScore: bestRankingScore,
+    preferences,
+    reasons: bestReasons,
+    hotelIndex: bestHotel.index
+  };
+}
+
+function confirmRecommendedHotelSelection() {
+  if (!recommendedHotelCard) {
+    return {
+      ok: false,
+      error: "No recommended hotel stored"
+    };
+  }
+
+  const hotelLink = recommendedHotelCard.querySelector("a");
+
+  if (!hotelLink) {
+    return {
+      ok: false,
+      error: "No hotel link found"
+    };
+  }
+
+  hotelLink.click();
+
+  return {
+    ok: true
+  };
+}
+
 async function findDateButtonWithNavigation(date, maxClicks = 12) {
   for (let i = 0; i <= maxClicks; i++) {
     const dateButton = findDateButton(date);

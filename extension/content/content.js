@@ -37,4 +37,41 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     runBookingFlow(message.payload).then(sendResponse);
     return true;
   }
+
+  if (message.type === "EXTRACT_HOTELS") {
+    const hotels = extractHotelCards();
+
+    sendResponse({
+      ok: true,
+      hotels
+    });
+
+    return;
+  }
+
+  if (message.type === "CLICK_FIRST_HOTEL") {
+    const result = clickFirstHotelCard();
+
+    sendResponse(result);
+
+    return;
+  }
+
+  if (message.type === "CLICK_BEST_MATCHED_HOTEL") {
+    const result = clickBestMatchedHotel(
+      message.payload?.hotelPreference || []
+    );
+
+    sendResponse(result);
+
+    return;
+  }
+
+  if (message.type === "CONFIRM_HOTEL_SELECTION") {
+    const result = confirmRecommendedHotelSelection();
+
+    sendResponse(result);
+
+    return;
+  }
 });
