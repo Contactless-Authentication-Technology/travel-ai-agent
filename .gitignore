@@ -19,3 +19,7 @@ booking-agent/output/
 # AI 도구
 .agents/
 .codex/
+.claude/settings.local.json
+
+# 데이터 파일
+데이터 저장 /

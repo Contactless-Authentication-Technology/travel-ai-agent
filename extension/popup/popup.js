@@ -16,21 +16,28 @@ async function sendToContent(message) {
     if (chrome.runtime.lastError) {
       result.textContent = JSON.stringify(
         {
-          ok: true,
+          ok: false,
           warning: chrome.runtime.lastError.message
         },
         null,
         2
       );
+
       return;
     }
 
-    result.textContent = JSON.stringify(response, null, 2);
+    result.textContent = JSON.stringify(
+      response,
+      null,
+      2
+    );
   });
 }
 
 function getPayloadFromTextarea() {
-  const raw = document.getElementById("payloadTextarea").value;
+  const raw = document.getElementById(
+    "payloadTextarea"
+  ).value;
 
   try {
     return JSON.parse(raw);
@@ -48,36 +55,74 @@ function getPayloadFromTextarea() {
   }
 }
 
-function buildMockPayload() {
-  return {
-    site: "booking.com",
-    payload: {
-      destination: "Paris",
-      checkIn: "2026-07-10",
-      checkOut: "2026-07-15",
-      adults: 2
+async function fetchPayloadFromAgent() {
+  const text = document.getElementById(
+    "naturalLanguageTextarea"
+  ).value;
+
+  const response = await fetch(
+    "http://127.0.0.1:8000/parse",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        text
+      })
     }
-  };
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      "Failed to parse travel request"
+    );
+  }
+
+  return await response.json();
 }
 
 document
   .getElementById("convertRequestButton")
-  ?.addEventListener("click", () => {
+  ?.addEventListener("click", async () => {
+    try {
+      const payload =
+        await fetchPayloadFromAgent();
 
-    const payload = buildMockPayload();
+      document.getElementById(
+        "payloadTextarea"
+      ).value = JSON.stringify(
+        payload,
+        null,
+        2
+      );
 
-    document.getElementById(
-      "payloadTextarea"
-    ).value = JSON.stringify(
-      payload,
-      null,
-      2
-    );
+      result.textContent = JSON.stringify(
+        {
+          ok: true,
+          message:
+            "Payload generated from FastAPI agent"
+        },
+        null,
+        2
+      );
+    } catch (error) {
+      result.textContent = JSON.stringify(
+        {
+          ok: false,
+          error: error.message
+        },
+        null,
+        2
+      );
+    }
   });
 
-document.getElementById("runFlowButton")
+document
+  .getElementById("runFlowButton")
   ?.addEventListener("click", () => {
-    const request = getPayloadFromTextarea();
+    const request =
+      getPayloadFromTextarea();
 
     if (!request) {
       return;
@@ -92,6 +137,7 @@ document.getElementById("runFlowButton")
         null,
         2
       );
+
       return;
     }
 
