@@ -52,6 +52,48 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
+function buildSignalBadges(hotel) {
+  const badges = [];
+
+  if (hotel.signals?.reviewTier === "excellent") {
+    badges.push("평점 매우 높음");
+  } else if (hotel.signals?.reviewTier === "strong") {
+    badges.push("평점 높음");
+  } else if (hotel.signals?.reviewTier === "good") {
+    badges.push("평점 양호");
+  }
+
+  if (hotel.signals?.luxuryTier === "strong") {
+    badges.push("럭셔리 강함");
+  } else if (hotel.signals?.luxuryTier === "good") {
+    badges.push("고급 숙소");
+  }
+
+  if (hotel.signals?.valueBucket === "strong") {
+    badges.push("가성비 매우 좋음");
+  } else if (hotel.signals?.valueBucket === "good") {
+    badges.push("가성비 좋음");
+  } else if (hotel.signals?.valueBucket === "moderate") {
+    badges.push("가성비 무난");
+  }
+
+  if (hotel.signals?.hasBreakfast) {
+    badges.push("조식");
+  }
+
+  if (hotel.signals?.hasMetroAccess) {
+    badges.push("지하철");
+  }
+
+  if (hotel.signals?.eiffelDistanceKm !== null && hotel.signals?.eiffelDistanceKm !== undefined) {
+    badges.push(`에펠탑 ${hotel.signals.eiffelDistanceKm}km`);
+  } else if (hotel.signals?.mentionsEiffel) {
+    badges.push("에펠탑 언급");
+  }
+
+  return badges;
+}
+
 function renderRecommendations(recommendations = []) {
   latestRecommendations = recommendations;
 
@@ -74,6 +116,7 @@ function renderRecommendations(recommendations = []) {
       const reasons = hotel.reasons?.length
         ? hotel.reasons.join(" | ")
         : "추천 이유 없음";
+      const signalBadges = buildSignalBadges(hotel);
 
       const isSelected = hotel.index === selectedRecommendationIndex;
 
@@ -85,6 +128,11 @@ function renderRecommendations(recommendations = []) {
             Score ${escapeHtml(hotel.rankingScore)} · Review ${escapeHtml(hotel.scoreText || "-")}
           </div>
           <div class="recommendation-meta">${escapeHtml(hotel.price || "가격 정보 없음")}</div>
+          <div class="recommendation-signals">
+            ${signalBadges.length
+              ? signalBadges.map((badge) => `<span class="signal-badge">${escapeHtml(badge)}</span>`).join("")
+              : '<span class="signal-badge">추가 신호 없음</span>'}
+          </div>
           <div class="recommendation-reasons">${escapeHtml(reasons)}</div>
           <button data-hotel-index="${hotel.index}">
             ${isSelected ? "Selected" : "Select This Hotel"}

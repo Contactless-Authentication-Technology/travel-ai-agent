@@ -25,6 +25,19 @@ def extract_dates(text: str) -> tuple[str, str]:
 
     return departure_date, return_date
 
+def contains_any_keyword(text: str, keywords: list[str]) -> bool:
+    lowered = text.lower()
+    return any(keyword.lower() in lowered for keyword in keywords)
+
+def add_preference_if_matched(
+    preferences: list[str],
+    text: str,
+    preference: str,
+    keywords: list[str]
+) -> None:
+    if contains_any_keyword(text, keywords) and preference not in preferences:
+        preferences.append(preference)
+
 def parse_travel_request(text: str) -> dict:
     departure_date, return_date = extract_dates(text)
  
@@ -43,14 +56,96 @@ def parse_travel_request(text: str) -> dict:
     if adults_match:
         request["adults"] = int(adults_match.group(1))
 
-    if "에펠탑" in text:
-        request["hotelPreference"].append("near_eiffel_tower")
+    add_preference_if_matched(
+        request["hotelPreference"],
+        text,
+        "near_eiffel_tower",
+        [
+            "에펠탑",
+            "에펠 타워",
+            "eiffel",
+            "에펠탑 근처",
+            "에펠탑 가까운",
+            "에펠탑 주변"
+        ]
+    )
 
-    if "조식" in text:
-        request["hotelPreference"].append("breakfast_included")
+    add_preference_if_matched(
+        request["hotelPreference"],
+        text,
+        "breakfast_included",
+        [
+            "조식",
+            "조식 포함",
+            "아침 포함",
+            "아침 제공",
+            "breakfast",
+            "breakfast included",
+            "free breakfast"
+        ]
+    )
 
-    if "역세권" in text or "지하철" in text:
-        request["hotelPreference"].append("near_metro")
+    add_preference_if_matched(
+        request["hotelPreference"],
+        text,
+        "near_metro",
+        [
+            "역세권",
+            "지하철",
+            "지하철 가까운",
+            "지하철 근처",
+            "역 근처",
+            "metro",
+            "subway"
+        ]
+    )
+
+    add_preference_if_matched(
+        request["hotelPreference"],
+        text,
+        "value_for_money",
+        [
+            "가성비",
+            "가성비 좋은",
+            "가격 대비",
+            "합리적인 가격",
+            "저렴한데 좋은",
+            "budget friendly",
+            "value for money",
+            "affordable"
+        ]
+    )
+
+    add_preference_if_matched(
+        request["hotelPreference"],
+        text,
+        "high_review_score",
+        [
+            "높은 평점",
+            "평점 높은",
+            "리뷰 좋은",
+            "후기 좋은",
+            "review score",
+            "high rating",
+            "high review"
+        ]
+    )
+
+    add_preference_if_matched(
+        request["hotelPreference"],
+        text,
+        "luxury_stay",
+        [
+            "럭셔리",
+            "고급",
+            "고급스러운",
+            "5성급",
+            "호캉스",
+            "luxury",
+            "premium",
+            "upscale"
+        ]
+    )
 
     return request
 

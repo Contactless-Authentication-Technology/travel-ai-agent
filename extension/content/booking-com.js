@@ -385,54 +385,242 @@ function parseHotelScore(scoreText) {
   return Number(match[0]);
 }
 
+function parsePriceValue(priceText) {
+  if (!priceText) {
+    return null;
+  }
+
+  const digits = priceText.replace(/[^\d]/g, "");
+
+  if (!digits) {
+    return null;
+  }
+
+  return Number(digits);
+}
+
+function normalizeHotelText(text = "") {
+  return text
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function includesAnyKeyword(text, keywords = []) {
+  return keywords.some((keyword) => text.includes(keyword));
+}
+
+function extractDistanceKm(text, keywords = []) {
+  const lines = text.split(/\n|\./).map((line) => line.trim()).filter(Boolean);
+
+  for (const line of lines) {
+    const normalizedLine = normalizeHotelText(line);
+
+    if (!includesAnyKeyword(normalizedLine, keywords)) {
+      continue;
+    }
+
+    const kmMatch = normalizedLine.match(/(\d+(?:[.,]\d+)?)\s*km/);
+    if (kmMatch) {
+      return Number(kmMatch[1].replace(",", "."));
+    }
+
+    const meterMatch = normalizedLine.match(/(\d+)\s*m/);
+    if (meterMatch) {
+      return Number(meterMatch[1]) / 1000;
+    }
+  }
+
+  return null;
+}
+
+function extractHotelSignals(hotel) {
+  const description = hotel.description || "";
+  const normalizedDescription = normalizeHotelText(description);
+  const priceValue = parsePriceValue(hotel.price);
+  const reviewScore = parseHotelScore(hotel.scoreText);
+  let valueBucket = null;
+  let reviewTier = null;
+  let luxuryTier = null;
+
+  if (priceValue !== null && reviewScore > 0) {
+    if (priceValue <= 200000 && reviewScore >= 8.5) {
+      valueBucket = "strong";
+    } else if (priceValue <= 350000 && reviewScore >= 8) {
+      valueBucket = "good";
+    } else if (priceValue <= 500000 && reviewScore >= 7.5) {
+      valueBucket = "moderate";
+    }
+  }
+
+  if (reviewScore >= 9) {
+    reviewTier = "excellent";
+  } else if (reviewScore >= 8.5) {
+    reviewTier = "strong";
+  } else if (reviewScore >= 8) {
+    reviewTier = "good";
+  }
+
+  const mentionsLuxury = includesAnyKeyword(normalizedDescription, [
+    "럭셔리",
+    "고급",
+    "프리미엄",
+    "5성급",
+    "luxury",
+    "premium",
+    "upscale"
+  ]);
+
+  if (mentionsLuxury || priceValue !== null) {
+    if (
+      mentionsLuxury &&
+      priceValue !== null &&
+      priceValue >= 450000 &&
+      reviewScore >= 8.5
+    ) {
+      luxuryTier = "strong";
+    } else if (
+      mentionsLuxury ||
+      (priceValue !== null && priceValue >= 350000 && reviewScore >= 8)
+    ) {
+      luxuryTier = "good";
+    }
+  }
+
+  const signals = {
+    priceValue,
+    reviewScore,
+    reviewTier,
+    hasBreakfast: includesAnyKeyword(normalizedDescription, [
+      "조식 포함",
+      "조식 제공",
+      "무료 조식",
+      "breakfast included",
+      "breakfast",
+      "free breakfast"
+    ]),
+    hasMetroAccess: includesAnyKeyword(normalizedDescription, [
+      "지하철",
+      "지하철 연결",
+      "역",
+      "역세권",
+      "metro",
+      "subway"
+    ]),
+    mentionsEiffel: includesAnyKeyword(normalizedDescription, [
+      "에펠",
+      "에펠탑",
+      "eiffel"
+    ]),
+    eiffelDistanceKm: extractDistanceKm(normalizedDescription, [
+      "에펠",
+      "에펠탑",
+      "eiffel"
+    ]),
+    valueBucket,
+    mentionsLuxury,
+    luxuryTier
+  };
+
+  return signals;
+}
+
 function calculateHotelRankingScore(hotel, preferences = []) {
   let score = parseHotelScore(hotel.scoreText);
   const reasons = [];
 
   if (score > 0) {
-    reasons.push(`Review score: ${score}`);
+    reasons.push(`리뷰 점수: ${score}`);
   }
 
-  const description = hotel.description || "";
+  const signals = extractHotelSignals(hotel);
 
   if (
     preferences.includes("breakfast_included") &&
-    (
-      description.includes("조식") ||
-      description.toLowerCase().includes("breakfast")
-    )
+    signals.hasBreakfast
   ) {
-    score += 1;
-    reasons.push("Matched preference: breakfast_included");
+    score += 1.5;
+    reasons.push("조식 포함 정보가 표시됨");
   }
 
   if (
     preferences.includes("near_eiffel_tower") &&
-    (
-      description.includes("에펠") ||
-      description.toLowerCase().includes("eiffel")
-    )
+    signals.mentionsEiffel
   ) {
-    score += 1;
-    reasons.push("Matched preference: near_eiffel_tower");
+    score += 2;
+    reasons.push("에펠탑 관련 위치 정보가 표시됨");
+  }
+
+  if (
+    preferences.includes("near_eiffel_tower") &&
+    signals.eiffelDistanceKm !== null
+  ) {
+    if (signals.eiffelDistanceKm <= 1) {
+      score += 2;
+      reasons.push(`에펠탑까지 약 ${signals.eiffelDistanceKm}km`);
+    } else if (signals.eiffelDistanceKm <= 2.5) {
+      score += 1;
+      reasons.push(`에펠탑과 비교적 가까움: 약 ${signals.eiffelDistanceKm}km`);
+    }
   }
 
   if (
     preferences.includes("near_metro") &&
-    (
-      description.includes("지하철") ||
-      description.includes("역") ||
-      description.toLowerCase().includes("metro") ||
-      description.toLowerCase().includes("subway")
-    )
+    signals.hasMetroAccess
   ) {
-    score += 1;
-    reasons.push("Matched preference: near_metro");
+    score += 1.5;
+    reasons.push("지하철 접근성 정보가 표시됨");
+  }
+
+  if (
+    preferences.includes("value_for_money") &&
+    signals.valueBucket
+  ) {
+    if (signals.valueBucket === "strong") {
+      score += 2;
+      reasons.push("가격 대비 평점이 매우 좋은 편");
+    } else if (signals.valueBucket === "good") {
+      score += 1.5;
+      reasons.push("가격 대비 평점이 좋은 편");
+    } else if (signals.valueBucket === "moderate") {
+      score += 1;
+      reasons.push("가격 대비 무난한 조건으로 보임");
+    }
+  }
+
+  if (
+    preferences.includes("high_review_score") &&
+    signals.reviewTier
+  ) {
+    if (signals.reviewTier === "excellent") {
+      score += 2;
+      reasons.push("리뷰 평점이 매우 높음");
+    } else if (signals.reviewTier === "strong") {
+      score += 1.5;
+      reasons.push("리뷰 평점이 높은 편");
+    } else if (signals.reviewTier === "good") {
+      score += 1;
+      reasons.push("리뷰 평점이 안정적인 편");
+    }
+  }
+
+  if (
+    preferences.includes("luxury_stay") &&
+    signals.luxuryTier
+  ) {
+    if (signals.luxuryTier === "strong") {
+      score += 2;
+      reasons.push("럭셔리 숙소로 보이는 신호가 강함");
+    } else if (signals.luxuryTier === "good") {
+      score += 1.5;
+      reasons.push("고급 숙소로 보이는 정보가 있음");
+    }
   }
 
   return {
     score,
-    reasons
+    reasons,
+    signals
   };
 }
 
@@ -467,7 +655,8 @@ function rankHotels(preferences = [], limit = 3) {
       return {
         ...hotel,
         rankingScore: rankingResult.score,
-        reasons: rankingResult.reasons
+        reasons: rankingResult.reasons,
+        signals: rankingResult.signals
       };
     })
     .sort((a, b) => b.rankingScore - a.rankingScore)
