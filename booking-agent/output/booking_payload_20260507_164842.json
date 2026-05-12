@@ -1,0 +1,9 @@
+{
+  "site": "booking.com",
+  "payload": {
+    "destination": "Paris",
+    "checkIn": "2026-08-05",
+    "checkOut": "2026-08-10",
+    "adults": 4
+  }
+}
