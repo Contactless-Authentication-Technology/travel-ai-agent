@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Travel AI Agent Dashboard</title>
+    <style>
+      :root {
+        --bg: #f3f7fb;
+        --panel: #ffffff;
+        --border: #d8e4f0;
+        --text: #142033;
+        --muted: #5f7086;
+        --brand: #0b63ce;
+        --brand-soft: #e9f2ff;
+        --success: #0f9f6e;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Arial, sans-serif;
+        background:
+          radial-gradient(circle at top left, #dcecff 0, transparent 28%),
+          linear-gradient(180deg, #f7fbff 0%, var(--bg) 100%);
+        color: var(--text);
+      }
+
+      .page {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 28px 20px 48px;
+      }
+
+      .hero {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 20px;
+        margin-bottom: 18px;
+      }
+
+      .hero h1 {
+        margin: 0 0 8px;
+        font-size: 34px;
+      }
+
+      .hero p {
+        margin: 0;
+        color: var(--muted);
+        max-width: 760px;
+        line-height: 1.5;
+      }
+
+      .status {
+        min-width: 240px;
+        padding: 14px 16px;
+        border-radius: 16px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        box-shadow: 0 10px 24px rgba(14, 25, 40, 0.07);
+      }
+
+      .status-label {
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+
+      .status-value {
+        font-weight: 700;
+        font-size: 16px;
+      }
+
+      .status-value.connected {
+        color: var(--success);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 18px;
+      }
+
+      .stack {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 18px;
+        box-shadow: 0 12px 28px rgba(12, 26, 41, 0.06);
+      }
+
+      .panel h2 {
+        margin: 0 0 14px;
+        font-size: 18px;
+      }
+
+      .subtle {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 124px;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        padding: 14px;
+        resize: vertical;
+        font: inherit;
+        background: #fbfdff;
+      }
+
+      .button-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      button {
+        border: 0;
+        border-radius: 12px;
+        padding: 11px 16px;
+        background: var(--brand);
+        color: white;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      button.secondary {
+        background: var(--brand-soft);
+        color: var(--brand);
+      }
+
+      .summary-list {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .summary-item {
+        padding: 12px;
+        border-radius: 14px;
+        background: #f8fbff;
+        border: 1px solid #e1ebf4;
+      }
+
+      .summary-label {
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 4px;
+      }
+
+      .summary-value {
+        font-weight: 700;
+      }
+
+      .recommendations {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .recommendation {
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 14px;
+        background: #fbfdff;
+      }
+
+      .recommendation.selected {
+        border-color: var(--brand);
+        background: #eef5ff;
+      }
+
+      .badge-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 8px 0;
+      }
+
+      .badge {
+        border-radius: 999px;
+        padding: 4px 8px;
+        background: #e1efff;
+        color: var(--brand);
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .reason-list {
+        font-size: 13px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .room-option {
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 14px;
+        background: #fbfdff;
+      }
+
+      .room-option + .room-option {
+        margin-top: 10px;
+      }
+
+      .hotel-card {
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 14px;
+        background: #fbfdff;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .hotel-card + .hotel-card {
+        margin-top: 10px;
+      }
+
+      .hotel-name {
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .hotel-stars {
+        color: #f59e0b;
+        font-size: 13px;
+        letter-spacing: 1px;
+      }
+
+      .hotel-price {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--brand);
+      }
+
+      .hotel-photo {
+        width: 100%;
+        height: 160px;
+        object-fit: cover;
+        border-radius: 10px;
+        background: #e8f0f8;
+      }
+
+      .hotel-link {
+        display: inline-block;
+        margin-top: 4px;
+        padding: 7px 12px;
+        border-radius: 10px;
+        background: var(--brand-soft);
+        color: var(--brand);
+        font-weight: 700;
+        font-size: 12px;
+        text-decoration: none;
+      }
+
+      .flight-card {
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 14px;
+        background: #fbfdff;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .flight-card + .flight-card {
+        margin-top: 10px;
+      }
+
+      .flight-price {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--brand);
+      }
+
+      .flight-route {
+        font-size: 15px;
+        font-weight: 600;
+      }
+
+      .flight-leg {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: #f4f8fd;
+      }
+
+      .flight-leg-label {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--brand);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .flight-leg-time {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text);
+      }
+
+      .flight-leg-divider {
+        height: 1px;
+        background: var(--border);
+        margin: 6px 0;
+      }
+
+      .flight-link {
+        display: inline-block;
+        margin-top: 8px;
+        padding: 8px 14px;
+        border-radius: 10px;
+        background: var(--brand-soft);
+        color: var(--brand);
+        font-weight: 700;
+        font-size: 13px;
+        text-decoration: none;
+      }
+
+      .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px;
+        margin-top: 10px;
+      }
+
+      .calendar-day-header {
+        text-align: center;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--muted);
+        padding: 4px 0;
+      }
+
+      .calendar-day {
+        border-radius: 8px;
+        padding: 5px 3px;
+        text-align: center;
+        font-size: 11px;
+        background: #f0f5fb;
+        border: 1px solid transparent;
+      }
+
+      .calendar-day .cal-date {
+        font-weight: 700;
+        font-size: 12px;
+        color: var(--text);
+      }
+
+      .calendar-day .cal-price {
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      .calendar-day.cheap {
+        background: #dcf5e9;
+        border-color: #0f9f6e;
+      }
+
+      .calendar-day.cheap .cal-price { color: #0b7a55; font-weight: 700; }
+
+      .calendar-day.moderate {
+        background: #fff8e1;
+        border-color: #f59e0b;
+      }
+
+      .calendar-day.expensive {
+        background: #fde8e8;
+        border-color: #e53e3e;
+      }
+
+      .calendar-day.selected-date {
+        border: 2px solid var(--brand);
+        background: var(--brand-soft);
+      }
+
+      .calendar-day.selected-date .cal-date { color: var(--brand); }
+
+      .calendar-day.empty {
+        background: transparent;
+        border-color: transparent;
+      }
+
+      .calendar-cheapest-badge {
+        display: inline-block;
+        margin-top: 10px;
+        padding: 6px 12px;
+        border-radius: 10px;
+        background: #dcf5e9;
+        color: #0b7a55;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 12px;
+        color: #1d2b3b;
+        background: #f8fbff;
+        border: 1px solid #e1ebf4;
+        border-radius: 14px;
+        padding: 14px;
+        max-height: 320px;
+        overflow: auto;
+      }
+
+      @media (max-width: 960px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        .hero {
+          flex-direction: column;
+        }
+
+        .summary-list {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <section class="hero">
+        <div>
+          <h1>Travel AI Agent Dashboard</h1>
+          <p>
+            여행 요청을 이 대시보드에서 관리하고, Chrome extension은
+            Booking.com 탭 안에서 실제 클릭과 입력을 수행하는 실행기 역할을 맡습니다.
+          </p>
+        </div>
+        <div class="status">
+          <div class="status-label">Booking Agent Status</div>
+          <div id="agentStatusValue" class="status-value">연결 대기 중</div>
+          <div id="agentStatusMeta" class="subtle" style="margin-top: 6px;">
+            Booking.com 탭을 열어 두면 extension이 자동으로 연결됩니다.
+          </div>
+        </div>
+      </section>
+
+      <div class="grid">
+        <div class="stack">
+          <section class="panel">
+            <h2>1. 여행 요청</h2>
+            <div class="subtle">여행 요청을 한국어로 입력하면 표준 payload로 변환됩니다.</div>
+            <textarea id="requestInput">7월 10일부터 7월 15일까지 파리 여행 가고 싶어. 성인 2명이고 에펠탑 근처 호텔이면 좋겠어.</textarea>
+            <div class="button-row">
+              <button id="parseButton">요청 해석하기</button>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>2. 항공편 검색</h2>
+            <div class="subtle">출발지와 목적지 기반으로 왕복 항공편을 검색합니다.</div>
+            <div class="button-row">
+              <button id="searchFlightsButton">항공편 검색</button>
+              <button id="priceCalendarButton" class="secondary">날짜별 가격 보기</button>
+            </div>
+            <div id="priceCalendar" style="margin-top: 14px;"></div>
+            <div id="flightResults" style="margin-top: 14px;">
+              <div class="subtle">아직 항공편을 검색하지 않았습니다.</div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>3. 호텔 검색</h2>
+            <div class="subtle">Booking.com API로 호텔을 검색합니다.</div>
+            <div class="button-row">
+              <button id="searchHotelsButton">호텔 검색</button>
+            </div>
+            <div id="hotelResults" style="margin-top: 14px;">
+              <div class="subtle">아직 호텔을 검색하지 않았습니다.</div>
+            </div>
+          </section>
+        </div>
+
+        <div class="stack">
+          <section class="panel">
+            <h2>현재 요청 요약</h2>
+            <div id="requestSummary" class="summary-list"></div>
+          </section>
+
+          <section class="panel">
+            <h2>객실 옵션</h2>
+            <div id="roomOptions" class="subtle">아직 객실 옵션을 불러오지 않았습니다.</div>
+          </section>
+
+          <section class="panel">
+            <h2>마지막 실행 결과</h2>
+            <pre id="resultView">아직 실행 결과가 없습니다.</pre>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
