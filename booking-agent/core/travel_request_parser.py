@@ -1,6 +1,28 @@
 import re
 import json
 
+ORIGIN_CITIES = {
+    "서울": "서울",
+    "인천": "인천",
+    "김포": "김포",
+    "부산": "부산",
+    "제주": "제주",
+    "대구": "대구",
+    "청주": "청주",
+}
+
+def extract_origin(text: str) -> str:
+    pattern = r"(" + "|".join(ORIGIN_CITIES.keys()) + r")에서"
+    match = re.search(pattern, text)
+    if match:
+        return match.group(1)
+
+    for city in ORIGIN_CITIES:
+        if f"{city} 출발" in text:
+            return city
+
+    return "서울"
+
 def extract_dates(text: str) -> tuple[str, str]:
     pattern = r"(\d+)월\s*(\d+)일.*?(\d+)월\s*(\d+)일"
 
@@ -41,7 +63,10 @@ def add_preference_if_matched(
 def parse_travel_request(text: str) -> dict:
     departure_date, return_date = extract_dates(text)
  
+    origin = extract_origin(text)
+
     request = {
+        "origin": origin,
         "destination": "",
         "departureDate": departure_date,
         "returnDate": return_date,
@@ -141,6 +166,7 @@ def parse_travel_request(text: str) -> dict:
             "고급스러운",
             "5성급",
             "호캉스",
+
             "luxury",
             "premium",
             "upscale"

@@ -217,6 +217,148 @@
         margin-top: 10px;
       }
 
+      .flight-card {
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 14px;
+        background: #fbfdff;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .flight-card + .flight-card {
+        margin-top: 10px;
+      }
+
+      .flight-price {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--brand);
+      }
+
+      .flight-route {
+        font-size: 15px;
+        font-weight: 600;
+      }
+
+      .flight-leg {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: #f4f8fd;
+      }
+
+      .flight-leg-label {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--brand);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .flight-leg-time {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text);
+      }
+
+      .flight-leg-divider {
+        height: 1px;
+        background: var(--border);
+        margin: 6px 0;
+      }
+
+      .flight-link {
+        display: inline-block;
+        margin-top: 8px;
+        padding: 8px 14px;
+        border-radius: 10px;
+        background: var(--brand-soft);
+        color: var(--brand);
+        font-weight: 700;
+        font-size: 13px;
+        text-decoration: none;
+      }
+
+      .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px;
+        margin-top: 10px;
+      }
+
+      .calendar-day-header {
+        text-align: center;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--muted);
+        padding: 4px 0;
+      }
+
+      .calendar-day {
+        border-radius: 8px;
+        padding: 5px 3px;
+        text-align: center;
+        font-size: 11px;
+        background: #f0f5fb;
+        border: 1px solid transparent;
+      }
+
+      .calendar-day .cal-date {
+        font-weight: 700;
+        font-size: 12px;
+        color: var(--text);
+      }
+
+      .calendar-day .cal-price {
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      .calendar-day.cheap {
+        background: #dcf5e9;
+        border-color: #0f9f6e;
+      }
+
+      .calendar-day.cheap .cal-price { color: #0b7a55; font-weight: 700; }
+
+      .calendar-day.moderate {
+        background: #fff8e1;
+        border-color: #f59e0b;
+      }
+
+      .calendar-day.expensive {
+        background: #fde8e8;
+        border-color: #e53e3e;
+      }
+
+      .calendar-day.selected-date {
+        border: 2px solid var(--brand);
+        background: var(--brand-soft);
+      }
+
+      .calendar-day.selected-date .cal-date { color: var(--brand); }
+
+      .calendar-day.empty {
+        background: transparent;
+        border-color: transparent;
+      }
+
+      .calendar-cheapest-badge {
+        display: inline-block;
+        margin-top: 10px;
+        padding: 6px 12px;
+        border-radius: 10px;
+        background: #dcf5e9;
+        color: #0b7a55;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
       pre {
         margin: 0;
         white-space: pre-wrap;
@@ -278,7 +420,20 @@
           </section>
 
           <section class="panel">
-            <h2>2. 추천과 예약 진행</h2>
+            <h2>2. 항공편 검색</h2>
+            <div class="subtle">출발지와 목적지 기반으로 왕복 항공편을 검색합니다.</div>
+            <div class="button-row">
+              <button id="searchFlightsButton">항공편 검색</button>
+              <button id="priceCalendarButton" class="secondary">날짜별 가격 보기</button>
+            </div>
+            <div id="priceCalendar" style="margin-top: 14px;"></div>
+            <div id="flightResults" style="margin-top: 14px;">
+              <div class="subtle">아직 항공편을 검색하지 않았습니다.</div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>3. 추천과 예약 진행</h2>
             <div class="button-row">
               <button id="recommendButton">상위 3개 추천 받기</button>
               <button id="bestMatchButton" class="secondary">최상위 1개 지정</button>

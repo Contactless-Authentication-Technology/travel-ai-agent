@@ -17,6 +17,7 @@ sys.path.append(str(core_path))
 
 from booking_payload_builder import build_booking_com_payload
 from travel_request_parser import parse_travel_request
+from api_clients.kiwi import search_flights, search_price_calendar, city_to_iata
 
 app = FastAPI()
 
@@ -40,6 +41,7 @@ SESSION_STATE = {
     "travelRequestText": "",
     "travelRequest": None,
     "payload": None,
+    "flightResults": [],
     "recommendations": [],
     "roomOptions": [],
     "selectedHotelIndex": None,
@@ -110,6 +112,69 @@ def parse_request_for_dashboard(request: TravelRequestInput):
         "travelRequest": deepcopy(SESSION_STATE["travelRequest"]),
         "payload": payload
     }
+
+
+@app.post("/api/flights/price-calendar")
+def price_calendar_endpoint():
+    travel_request = SESSION_STATE.get("travelRequest")
+
+    if not travel_request:
+        return {"ok": False, "error": "먼저 여행 요청을 해석해 주세요."}
+
+    origin_iata = city_to_iata(travel_request.get("origin", "서울"))
+    destination_iata = city_to_iata(travel_request.get("destination", ""))
+
+    if not origin_iata or not destination_iata:
+        return {"ok": False, "error": "출발지 또는 목적지 IATA 코드를 찾을 수 없습니다."}
+
+    departure_date = travel_request.get("departureDate", "")
+    month = departure_date[:7] if departure_date else ""
+
+    if not month:
+        return {"ok": False, "error": "출발 날짜를 먼저 입력해 주세요."}
+
+    try:
+        calendar = search_price_calendar(
+            fly_from=origin_iata,
+            fly_to=destination_iata,
+            month=month,
+            adults=travel_request.get("adults", 1),
+        )
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+    return {"ok": True, "calendar": calendar}
+
+
+@app.post("/api/flights/search")
+def search_flights_endpoint():
+    travel_request = SESSION_STATE.get("travelRequest")
+
+    if not travel_request:
+        return {"ok": False, "error": "먼저 여행 요청을 해석해 주세요."}
+
+    origin_iata = city_to_iata(travel_request.get("origin", "서울"))
+    destination_iata = city_to_iata(travel_request.get("destination", ""))
+
+    if not origin_iata:
+        return {"ok": False, "error": f"출발지 IATA 코드를 찾을 수 없습니다: {travel_request.get('origin')}"}
+
+    if not destination_iata:
+        return {"ok": False, "error": f"목적지 IATA 코드를 찾을 수 없습니다: {travel_request.get('destination')}"}
+
+    try:
+        flights = search_flights(
+            fly_from=origin_iata,
+            fly_to=destination_iata,
+            departure_date=travel_request["departureDate"],
+            return_date=travel_request.get("returnDate"),
+            adults=travel_request.get("adults", 1),
+        )
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+    SESSION_STATE["flightResults"] = flights
+    return {"ok": True, "flights": flights}
 
 
 @app.get("/api/session")
