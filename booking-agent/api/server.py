@@ -18,6 +18,7 @@ sys.path.append(str(core_path))
 from booking_payload_builder import build_booking_com_payload
 from travel_request_parser import parse_travel_request
 from api_clients.kiwi import search_flights, search_price_calendar, city_to_iata
+from api_clients.booking import search_destination, search_hotels, get_room_list
 
 app = FastAPI()
 
@@ -42,6 +43,7 @@ SESSION_STATE = {
     "travelRequest": None,
     "payload": None,
     "flightResults": [],
+    "hotelResults": [],
     "recommendations": [],
     "roomOptions": [],
     "selectedHotelIndex": None,
@@ -175,6 +177,56 @@ def search_flights_endpoint():
 
     SESSION_STATE["flightResults"] = flights
     return {"ok": True, "flights": flights}
+
+
+@app.post("/api/hotels/search")
+def search_hotels_endpoint():
+    travel_request = SESSION_STATE.get("travelRequest")
+
+    if not travel_request:
+        return {"ok": False, "error": "먼저 여행 요청을 해석해 주세요."}
+
+    destination = travel_request.get("destination", "")
+    if not destination:
+        return {"ok": False, "error": "목적지를 인식하지 못했습니다."}
+
+    try:
+        dest_id = search_destination(destination)
+        if not dest_id:
+            return {"ok": False, "error": f"'{destination}' 의 Booking.com dest_id를 찾을 수 없습니다."}
+
+        hotels = search_hotels(
+            dest_id=dest_id,
+            checkin=travel_request["departureDate"],
+            checkout=travel_request["returnDate"],
+            adults=travel_request.get("adults", 1),
+        )
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+    SESSION_STATE["hotelResults"] = hotels
+    return {"ok": True, "hotels": hotels, "destId": dest_id}
+
+
+@app.post("/api/hotels/{hotel_id}/rooms")
+def get_hotel_rooms_endpoint(hotel_id: str):
+    travel_request = SESSION_STATE.get("travelRequest")
+
+    if not travel_request:
+        return {"ok": False, "error": "먼저 여행 요청을 해석해 주세요."}
+
+    try:
+        rooms = get_room_list(
+            hotel_id=hotel_id,
+            checkin=travel_request["departureDate"],
+            checkout=travel_request["returnDate"],
+            adults=travel_request.get("adults", 1),
+        )
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+    SESSION_STATE["roomOptions"] = rooms
+    return {"ok": True, "rooms": rooms}
 
 
 @app.get("/api/session")

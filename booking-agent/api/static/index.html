@@ -217,6 +217,57 @@
         margin-top: 10px;
       }
 
+      .hotel-card {
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 14px;
+        background: #fbfdff;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .hotel-card + .hotel-card {
+        margin-top: 10px;
+      }
+
+      .hotel-name {
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .hotel-stars {
+        color: #f59e0b;
+        font-size: 13px;
+        letter-spacing: 1px;
+      }
+
+      .hotel-price {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--brand);
+      }
+
+      .hotel-photo {
+        width: 100%;
+        height: 160px;
+        object-fit: cover;
+        border-radius: 10px;
+        background: #e8f0f8;
+      }
+
+      .hotel-link {
+        display: inline-block;
+        margin-top: 4px;
+        padding: 7px 12px;
+        border-radius: 10px;
+        background: var(--brand-soft);
+        color: var(--brand);
+        font-weight: 700;
+        font-size: 12px;
+        text-decoration: none;
+      }
+
       .flight-card {
         border: 1px solid var(--border);
         border-radius: 16px;
@@ -415,7 +466,6 @@
             <textarea id="requestInput">7월 10일부터 7월 15일까지 파리 여행 가고 싶어. 성인 2명이고 에펠탑 근처 호텔이면 좋겠어.</textarea>
             <div class="button-row">
               <button id="parseButton">요청 해석하기</button>
-              <button id="runSearchButton" class="secondary">숙소 검색 실행</button>
             </div>
           </section>
 
@@ -433,16 +483,14 @@
           </section>
 
           <section class="panel">
-            <h2>3. 추천과 예약 진행</h2>
+            <h2>3. 호텔 검색</h2>
+            <div class="subtle">Booking.com API로 호텔을 검색합니다.</div>
             <div class="button-row">
-              <button id="recommendButton">상위 3개 추천 받기</button>
-              <button id="bestMatchButton" class="secondary">최상위 1개 지정</button>
+              <button id="searchHotelsButton">호텔 검색</button>
             </div>
-            <div class="button-row">
-              <button id="confirmHotelButton">선택한 호텔 열기</button>
-              <button id="extractRoomsButton" class="secondary">객실 옵션 불러오기</button>
+            <div id="hotelResults" style="margin-top: 14px;">
+              <div class="subtle">아직 호텔을 검색하지 않았습니다.</div>
             </div>
-            <div id="recommendations" class="recommendations" style="margin-top: 14px;"></div>
           </section>
         </div>
 

@@ -4,6 +4,7 @@ const recommendationsRoot = document.getElementById("recommendations");
 const roomOptionsRoot = document.getElementById("roomOptions");
 const flightResultsRoot = document.getElementById("flightResults");
 const priceCalendarRoot = document.getElementById("priceCalendar");
+const hotelResultsRoot = document.getElementById("hotelResults");
 const requestSummaryRoot = document.getElementById("requestSummary");
 const agentStatusValue = document.getElementById("agentStatusValue");
 const agentStatusMeta = document.getElementById("agentStatusMeta");
@@ -259,6 +260,64 @@ function renderRecommendations(recommendations) {
     });
 }
 
+function renderHotelResults(hotels) {
+  if (!hotels?.length) {
+    hotelResultsRoot.innerHTML = `<div class="subtle">아직 호텔을 검색하지 않았습니다.</div>`;
+    return;
+  }
+
+  const nights = (() => {
+    const dep = sessionState?.travelRequest?.departureDate;
+    const ret = sessionState?.travelRequest?.returnDate;
+    if (!dep || !ret) return null;
+    return Math.round((new Date(ret) - new Date(dep)) / (1000 * 60 * 60 * 24));
+  })();
+
+  hotelResultsRoot.innerHTML = hotels.map((hotel) => {
+    const stars = hotel.stars ? "★".repeat(hotel.stars) + "☆".repeat(Math.max(0, 5 - hotel.stars)) : "";
+    const reviewLabel = hotel.reviewScore
+      ? `${hotel.reviewScore} ${hotel.reviewScoreWord || ""} · ${(hotel.reviewCount || 0).toLocaleString()}개 리뷰`
+      : "리뷰 없음";
+    const priceLabel = hotel.price
+      ? nights
+        ? `₩${Number(hotel.price).toLocaleString()} (${nights}박 총액)`
+        : `₩${Number(hotel.price).toLocaleString()}`
+      : "가격 정보 없음";
+
+    return `
+      <div class="hotel-card">
+        ${hotel.photoUrl ? `<img class="hotel-photo" src="${escapeHtml(hotel.photoUrl)}" alt="${escapeHtml(hotel.name || "")}" loading="lazy">` : ""}
+        <div class="hotel-stars">${escapeHtml(stars)}</div>
+        <div class="hotel-name">${escapeHtml(hotel.name || "Unknown")}</div>
+        <div class="subtle">${escapeHtml(reviewLabel)}</div>
+        <div class="hotel-price">${escapeHtml(priceLabel)}</div>
+        <div class="button-row" style="margin-top: 8px;">
+          <button data-hotel-id="${escapeHtml(String(hotel.hotelId))}" class="secondary">객실 보기</button>
+          ${hotel.deepLink ? `<a class="hotel-link" href="${escapeHtml(hotel.deepLink)}" target="_blank">Booking.com에서 보기 →</a>` : ""}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  hotelResultsRoot.querySelectorAll("[data-hotel-id]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const hotelId = btn.dataset.hotelId;
+      renderResult("객실 정보 불러오는 중...");
+      try {
+        const data = await fetchJson(`/api/hotels/${hotelId}/rooms`, { method: "POST" });
+        if (data.ok) {
+          renderRoomOptions(data.rooms);
+          renderResult({ ok: true, count: data.rooms.length });
+        } else {
+          renderResult({ ok: false, error: data.error });
+        }
+      } catch (e) {
+        renderResult({ ok: false, error: e.message });
+      }
+    });
+  });
+}
+
 function renderRoomOptions(roomOptions) {
   if (!roomOptions?.length) {
     roomOptionsRoot.innerHTML = `
@@ -281,7 +340,7 @@ function renderRoomOptions(roomOptions) {
       <div class="room-option">
         <div><strong>옵션 ${index + 1}</strong> · ${escapeHtml(option.roomName)}</div>
         <div class="subtle" style="margin-top: 6px; font-size: 15px; color: #152033; font-weight: 700;">
-          ${escapeHtml(option.displayPrice || option.price || "가격 정보 없음")}
+          ${option.price ? `₩${Number(option.price).toLocaleString()} / 1박` : escapeHtml(option.displayPrice || "가격 정보 없음")}
         </div>
         <div class="badge-row" style="margin-top: 8px;">
           ${badges.length ? badges.map((badge) => `<span class="badge">${escapeHtml(badge)}</span>`).join("") : '<span class="badge">추가 정보 없음</span>'}
@@ -313,9 +372,10 @@ async function refreshSession() {
   selectedHotelIndex = sessionState.selectedHotelIndex;
   renderRequestSummary(sessionState);
   renderFlightResults(sessionState.flightResults || []);
-  renderRecommendations(sessionState.recommendations || []);
+  renderHotelResults(sessionState.hotelResults || []);
   renderRoomOptions(sessionState.roomOptions || []);
   renderAgentStatus(sessionState);
+
 
   if (sessionState.lastResult) {
     renderResult(sessionState.lastResult);
@@ -351,45 +411,25 @@ document.getElementById("parseButton").addEventListener("click", async () => {
   renderResult(data);
 });
 
-document.getElementById("runSearchButton").addEventListener("click", async () => {
-  const payload = sessionState?.payload?.payload;
 
-  if (!payload) {
-    renderResult("먼저 요청을 해석해 주세요.");
+document.getElementById("searchHotelsButton").addEventListener("click", async () => {
+  if (!sessionState?.travelRequest) {
+    renderResult("먼저 여행 요청을 해석해 주세요.");
     return;
   }
 
-  await enqueueCommand("RUN_BOOKING_FLOW", payload);
-});
-
-document.getElementById("recommendButton").addEventListener("click", async () => {
-  const preferences = sessionState?.payload?.payload?.hotelPreference || [];
-  await enqueueCommand("GET_TOP_HOTEL_RECOMMENDATIONS", {
-    hotelPreference: preferences,
-    limit: 3
-  });
-});
-
-document.getElementById("bestMatchButton").addEventListener("click", async () => {
-  const preferences = sessionState?.payload?.payload?.hotelPreference || [];
-  await enqueueCommand("CLICK_BEST_MATCHED_HOTEL", {
-    hotelPreference: preferences
-  });
-});
-
-document.getElementById("confirmHotelButton").addEventListener("click", async () => {
-  if (selectedHotelIndex === null || selectedHotelIndex === undefined) {
-    renderResult("먼저 추천 후보 중 하나를 선택해 주세요.");
-    return;
+  renderResult("호텔 검색 중...");
+  try {
+    const data = await fetchJson("/api/hotels/search", { method: "POST" });
+    if (data.ok) {
+      renderHotelResults(data.hotels);
+      renderResult({ ok: true, count: data.hotels.length, destId: data.destId });
+    } else {
+      renderResult({ ok: false, error: data.error });
+    }
+  } catch (e) {
+    renderResult({ ok: false, error: e.message });
   }
-
-  await enqueueCommand("CONFIRM_SPECIFIC_HOTEL_SELECTION", {
-    hotelIndex: selectedHotelIndex
-  });
-});
-
-document.getElementById("extractRoomsButton").addEventListener("click", async () => {
-  await enqueueCommand("EXTRACT_ROOM_OPTIONS");
 });
 
 document.getElementById("priceCalendarButton").addEventListener("click", async () => {
