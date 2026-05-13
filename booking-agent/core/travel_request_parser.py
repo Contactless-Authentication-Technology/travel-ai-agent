@@ -1,194 +1,117 @@
-import re
 import json
+import os
+import re
+from pathlib import Path
 
-ORIGIN_CITIES = {
-    "서울": "서울",
-    "인천": "인천",
-    "김포": "김포",
-    "부산": "부산",
-    "제주": "제주",
-    "대구": "대구",
-    "청주": "청주",
-}
+from dotenv import load_dotenv
 
-def extract_origin(text: str) -> str:
-    pattern = r"(" + "|".join(ORIGIN_CITIES.keys()) + r")에서"
-    match = re.search(pattern, text)
-    if match:
-        return match.group(1)
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
-    for city in ORIGIN_CITIES:
-        if f"{city} 출발" in text:
-            return city
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
-    return "서울"
+SYSTEM_PROMPT = """\
+You are a travel request parser. Read the user's Korean or English travel request and output ONLY a JSON object.
 
-def extract_dates(text: str) -> tuple[str, str]:
-    pattern = r"(\d+)월\s*(\d+)일.*?(\d+)월\s*(\d+)일"
+Fields:
+- origin: Korean city of departure (e.g. "서울", "부산", "인천"). Default "서울".
+- destination: English city name (e.g. "Paris", "Tokyo", "New York", "Barcelona", "Rome", "Amsterdam").
+- departureDate: YYYY-MM-DD. If year is not given, use 2026.
+- returnDate: YYYY-MM-DD. If year is not given, use 2026.
+- adults: number of adults as integer. Default 1.
+- hotelPreference: list of applicable tags (use only from this set):
+    "near_eiffel_tower" — near Eiffel Tower
+    "breakfast_included" — breakfast included
+    "near_metro" — near subway or metro station
+    "value_for_money" — good value / affordable
+    "high_review_score" — high rating / good reviews
+    "luxury_stay" — luxury, 5-star, premium
 
-    match = re.search(pattern, text)
+Output only a valid JSON object. No prose, no markdown.
+"""
 
-    if not match:
-        return "2026-07-10", "2026-07-15"
 
-    departure_month = int(match.group(1))
-    departure_day = int(match.group(2))
+def _parse_with_llm(text: str) -> dict:
+    from openai import OpenAI
 
-    return_month = int(match.group(3))
-    return_day = int(match.group(4))
-
-    departure_date = (
-        f"2026-{departure_month:02d}-{departure_day:02d}"
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": text},
+        ],
+        response_format={"type": "json_object"},
+        max_tokens=400,
     )
+    return json.loads(resp.choices[0].message.content)
 
-    return_date = (
-        f"2026-{return_month:02d}-{return_day:02d}"
-    )
 
-    return departure_date, return_date
+def _parse_with_regex(text: str) -> dict:
+    def extract_origin(t: str) -> str:
+        cities = ["서울", "인천", "김포", "부산", "제주", "대구", "청주"]
+        for city in cities:
+            if f"{city}에서" in t or f"{city} 출발" in t:
+                return city
+        return "서울"
 
-def contains_any_keyword(text: str, keywords: list[str]) -> bool:
-    lowered = text.lower()
-    return any(keyword.lower() in lowered for keyword in keywords)
+    def extract_dates(t: str) -> tuple[str, str]:
+        match = re.search(r"(\d+)월\s*(\d+)일.*?(\d+)월\s*(\d+)일", t)
+        if not match:
+            return "2026-07-10", "2026-07-15"
+        dep = f"2026-{int(match.group(1)):02d}-{int(match.group(2)):02d}"
+        ret = f"2026-{int(match.group(3)):02d}-{int(match.group(4)):02d}"
+        return dep, ret
 
-def add_preference_if_matched(
-    preferences: list[str],
-    text: str,
-    preference: str,
-    keywords: list[str]
-) -> None:
-    if contains_any_keyword(text, keywords) and preference not in preferences:
-        preferences.append(preference)
-
-def parse_travel_request(text: str) -> dict:
-    departure_date, return_date = extract_dates(text)
- 
-    origin = extract_origin(text)
-
-    request = {
-        "origin": origin,
-        "destination": "",
-        "departureDate": departure_date,
-        "returnDate": return_date,
-        "adults": 1,
-        "hotelPreference": []
+    DEST_MAP = {
+        "파리": "Paris", "도쿄": "Tokyo", "오사카": "Osaka",
+        "뉴욕": "New York", "런던": "London", "방콕": "Bangkok",
+        "싱가포르": "Singapore", "바르셀로나": "Barcelona",
+        "로마": "Rome", "암스테르담": "Amsterdam", "프랑크푸르트": "Frankfurt",
     }
 
-    if "파리" in text:
-        request["destination"] = "Paris"
+    PREF_KEYWORDS = {
+        "near_eiffel_tower": ["에펠탑", "에펠 타워", "eiffel"],
+        "breakfast_included": ["조식", "아침 포함", "breakfast"],
+        "near_metro": ["역세권", "지하철", "metro", "subway"],
+        "value_for_money": ["가성비", "합리적", "affordable"],
+        "high_review_score": ["높은 평점", "리뷰 좋은", "high rating"],
+        "luxury_stay": ["럭셔리", "고급", "5성급", "luxury", "premium"],
+    }
 
+    departure_date, return_date = extract_dates(text)
+    destination = next((eng for kor, eng in DEST_MAP.items() if kor in text), "")
     adults_match = re.search(r"성인\s*(\d+)명", text)
-    if adults_match:
-        request["adults"] = int(adults_match.group(1))
+    adults = int(adults_match.group(1)) if adults_match else 1
+    prefs = [tag for tag, kws in PREF_KEYWORDS.items() if any(kw in text for kw in kws)]
 
-    add_preference_if_matched(
-        request["hotelPreference"],
-        text,
-        "near_eiffel_tower",
-        [
-            "에펠탑",
-            "에펠 타워",
-            "eiffel",
-            "에펠탑 근처",
-            "에펠탑 가까운",
-            "에펠탑 주변"
-        ]
-    )
+    return {
+        "origin": extract_origin(text),
+        "destination": destination,
+        "departureDate": departure_date,
+        "returnDate": return_date,
+        "adults": adults,
+        "hotelPreference": prefs,
+    }
 
-    add_preference_if_matched(
-        request["hotelPreference"],
-        text,
-        "breakfast_included",
-        [
-            "조식",
-            "조식 포함",
-            "아침 포함",
-            "아침 제공",
-            "breakfast",
-            "breakfast included",
-            "free breakfast"
-        ]
-    )
 
-    add_preference_if_matched(
-        request["hotelPreference"],
-        text,
-        "near_metro",
-        [
-            "역세권",
-            "지하철",
-            "지하철 가까운",
-            "지하철 근처",
-            "역 근처",
-            "metro",
-            "subway"
-        ]
-    )
+def parse_travel_request(text: str) -> dict:
+    if OPENAI_API_KEY:
+        try:
+            result = _parse_with_llm(text)
+            result.setdefault("origin", "서울")
+            result.setdefault("destination", "")
+            result.setdefault("departureDate", "2026-07-10")
+            result.setdefault("returnDate", "2026-07-15")
+            result.setdefault("adults", 1)
+            result.setdefault("hotelPreference", [])
+            return result
+        except Exception as e:
+            print(f"[parser] LLM failed, falling back to regex: {e}")
 
-    add_preference_if_matched(
-        request["hotelPreference"],
-        text,
-        "value_for_money",
-        [
-            "가성비",
-            "가성비 좋은",
-            "가격 대비",
-            "합리적인 가격",
-            "저렴한데 좋은",
-            "budget friendly",
-            "value for money",
-            "affordable"
-        ]
-    )
-
-    add_preference_if_matched(
-        request["hotelPreference"],
-        text,
-        "high_review_score",
-        [
-            "높은 평점",
-            "평점이 높은",
-            "리뷰 좋은",
-            "후기 좋은",
-            "review score",
-            "high rating",
-            "high review"
-        ]
-    )
-
-    add_preference_if_matched(
-        request["hotelPreference"],
-        text,
-        "luxury_stay",
-        [
-            "럭셔리",
-            "고급",
-            "고급스러운",
-            "5성급",
-            "호캉스",
-
-            "luxury",
-            "premium",
-            "upscale"
-        ]
-    )
-
-    return request
+    return _parse_with_regex(text)
 
 
 if __name__ == "__main__":
-    user_input = (
-        "7월 10일부터 7월 15일까지 "
-        "파리 여행 가고 싶어. "
-        "성인 2명이고 에펠탑 근처 호텔이면 좋겠어."
-    )
-
-    travel_request = parse_travel_request(user_input)
-
-    print(
-        json.dumps(
-            travel_request,
-            indent=2,
-            ensure_ascii=False
-        )
-    )
+    user_input = "7월 10일부터 7월 15일까지 파리 여행 가고 싶어. 성인 2명이고 에펠탑 근처 호텔이면 좋겠어."
+    result = parse_travel_request(user_input)
+    print(json.dumps(result, indent=2, ensure_ascii=False))
