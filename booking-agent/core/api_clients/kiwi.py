@@ -80,9 +80,13 @@ def normalize_flight(itinerary: dict) -> dict:
 
     inbound = _normalize_sector(itinerary.get("inbound", {})) if itinerary.get("inbound") else None
 
+    booking_options = itinerary.get("booking_options", [])
+    deep_link = booking_options[0].get("booking_url") if booking_options else None
+
     result = {
         "id": itinerary.get("id"),
         "price": price,
+        "deepLink": deep_link,
         **outbound,
     }
 
